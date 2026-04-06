@@ -396,6 +396,7 @@ async def _send_deal_alerts(config, scored: list[tuple]) -> None:
             chat_id=config.telegram.chat_id,
             analysis=analysis,
             listing_url=listing.url,
+            posted_at=listing.posted_at,
         )
     console.print(f"[green]Sent {min(3, len(scored))} Telegram alerts.[/]")
 

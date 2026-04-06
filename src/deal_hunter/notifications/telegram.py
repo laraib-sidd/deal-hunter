@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 
@@ -12,6 +12,7 @@ from deal_hunter.analysis.schemas import DealAnalysis
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org"
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _score_bar(score: int) -> str:
@@ -32,7 +33,50 @@ def _verdict_badge(verdict: str) -> str:
     return badges.get(verdict, verdict)
 
 
-def _format_deal_message(analysis: DealAnalysis, listing_url: str = "") -> str:
+def _time_ago(posted_at: datetime | None) -> str:
+    """Human-friendly 'time ago' string in IST."""
+    if posted_at is None:
+        return ""
+
+    now = datetime.now(UTC)
+    if posted_at.tzinfo is None:
+        posted_at = posted_at.replace(tzinfo=UTC)
+
+    delta = now - posted_at
+    total_seconds = int(delta.total_seconds())
+
+    if total_seconds < 0:
+        return "just now"
+    if total_seconds < 3600:
+        mins = total_seconds // 60
+        return f"{mins}m ago" if mins > 0 else "just now"
+    if total_seconds < 86400:
+        hours = total_seconds // 3600
+        return f"{hours}h ago"
+    days = total_seconds // 86400
+    if days == 1:
+        return "1 day ago"
+    if days < 30:
+        return f"{days} days ago"
+    months = days // 30
+    return f"{months}mo ago"
+
+
+def _format_posted(posted_at: datetime | None) -> str:
+    """Format posted date in IST with time-ago."""
+    if posted_at is None:
+        return ""
+
+    if posted_at.tzinfo is None:
+        posted_at = posted_at.replace(tzinfo=UTC)
+
+    ist_time = posted_at.astimezone(IST)
+    date_str = ist_time.strftime("%-d %b %Y, %-I:%M %p IST")
+    ago = _time_ago(posted_at)
+    return f"{date_str} ({ago})"
+
+
+def _format_deal_message(analysis: DealAnalysis, listing_url: str = "", posted_at: datetime | None = None) -> str:
     """Format a deal analysis as a beautiful Telegram HTML message."""
     badge = _verdict_badge(analysis.verdict)
     bar = _score_bar(analysis.deal_score)
@@ -58,6 +102,11 @@ def _format_deal_message(analysis: DealAnalysis, listing_url: str = "") -> str:
         lines.append(f"\U0001f3f7 {analysis.generation} \u2022 {analysis.category.upper()}")
     else:
         lines.append(f"\U0001f3f7 {analysis.category.upper()}")
+
+    # Posted time
+    posted_str = _format_posted(posted_at)
+    if posted_str:
+        lines.append(f"\U0001f552 {posted_str}")
 
     lines.extend([
         "",
@@ -145,13 +194,14 @@ async def send_deal_alert(
     chat_id: str,
     analysis: DealAnalysis,
     listing_url: str = "",
+    posted_at: datetime | None = None,
 ) -> bool:
     """Send a deal alert to Telegram. Returns True on success."""
     if not bot_token or not chat_id:
         logger.debug("Telegram not configured — skipping alert")
         return False
 
-    message = _format_deal_message(analysis, listing_url)
+    message = _format_deal_message(analysis, listing_url, posted_at=posted_at)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
