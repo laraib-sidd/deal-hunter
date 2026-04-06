@@ -48,7 +48,11 @@ async def ai_normalize(
         if response is None:
             return None
 
-        result = json.loads(extract_content(response))
+        parsed = json.loads(extract_content(response))
+        # Groq sometimes wraps in a list
+        result = parsed[0] if isinstance(parsed, list) else parsed
+        if not isinstance(result, dict):
+            return None
 
         release = result.get("release_year") or "2023"
         release = str(release).strip()

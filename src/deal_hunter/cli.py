@@ -390,7 +390,8 @@ async def _send_deal_alerts(config, scored: list[tuple]) -> None:
         top_deals=top_analyses,
     )
 
-    for listing, analysis in scored[:3]:  # alert top 3 only
+    send_count = min(len(scored), 10)  # cap at 10 individual alerts
+    for listing, analysis in scored[:send_count]:
         await send_deal_alert(
             bot_token=config.telegram.bot_token,
             chat_id=config.telegram.chat_id,
@@ -398,7 +399,7 @@ async def _send_deal_alerts(config, scored: list[tuple]) -> None:
             listing_url=listing.url,
             posted_at=listing.posted_at,
         )
-    console.print(f"[green]Sent {min(3, len(scored))} Telegram alerts.[/]")
+    console.print(f"[green]Sent {send_count} Telegram alerts.[/]")
 
 
 @app.command()
