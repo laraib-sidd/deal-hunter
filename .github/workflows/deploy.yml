@@ -35,5 +35,5 @@ jobs:
 
       - name: Run tests in container
         run: |
-          docker run --rm ${{ env.IMAGE }}:${{ github.sha }} \
-            pytest tests/ --tb=short -q
+          docker run --rm --entrypoint pytest ${{ env.IMAGE }}:${{ github.sha }} \
+            tests/ --tb=short -q
