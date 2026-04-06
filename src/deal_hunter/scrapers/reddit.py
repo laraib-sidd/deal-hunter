@@ -38,9 +38,35 @@ _PRICE_PATTERNS = [
 ]
 
 _LOCATION_PATTERN = re.compile(
-    r"\b(?:location|city|loc|based\s+in|from)\s*[:=\-]?\s*([A-Za-z\s]{3,30})",
+    r"(?:location|city|loc|based\s+in|ship(?:ping)?\s+from)\s*[:=\-]\s*([A-Za-z][A-Za-z ]{2,25})",
     re.IGNORECASE,
 )
+
+# Common Indian cities for direct mention detection in titles
+_INDIAN_CITIES = {
+    "mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "chennai",
+    "kolkata", "pune", "ahmedabad", "jaipur", "lucknow", "chandigarh",
+    "kochi", "indore", "nagpur", "coimbatore", "gurgaon", "noida",
+    "ghaziabad", "thane", "navi mumbai", "vadodara", "surat", "bhopal",
+    "patna", "vizag", "visakhapatnam", "mysore", "mangalore", "trivandrum",
+}
+
+
+def _extract_location(text: str) -> str | None:
+    """Extract location — try label pattern first, then city name scan."""
+    match = _LOCATION_PATTERN.search(text)
+    if match:
+        loc = match.group(1).strip().rstrip(".,;")
+        if len(loc) >= 3:
+            return loc[:50]
+
+    # Fallback: scan for known Indian city names
+    text_lower = text.lower()
+    for city in _INDIAN_CITIES:
+        if re.search(rf"\b{re.escape(city)}\b", text_lower):
+            return city.title()
+
+    return None
 
 
 def _is_hardware_sale_post(title: str, body: str) -> bool:
@@ -60,14 +86,6 @@ def _extract_price(text: str) -> float | None:
                     return price
             except ValueError:
                 continue
-    return None
-
-
-def _extract_location(text: str) -> str | None:
-    match = _LOCATION_PATTERN.search(text)
-    if match:
-        loc = match.group(1).strip()
-        return loc[:100] if loc else None
     return None
 
 

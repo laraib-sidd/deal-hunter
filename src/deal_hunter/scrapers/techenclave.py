@@ -58,15 +58,31 @@ def _extract_price(html: str) -> float | None:
     return None
 
 
+_INDIAN_CITIES = {
+    "mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "chennai",
+    "kolkata", "pune", "ahmedabad", "jaipur", "lucknow", "chandigarh",
+    "kochi", "indore", "nagpur", "coimbatore", "gurgaon", "noida",
+    "ghaziabad", "thane", "navi mumbai", "vadodara", "surat", "bhopal",
+    "patna", "vizag", "visakhapatnam", "mysore", "mangalore", "trivandrum",
+}
+
+
 def _extract_location(html: str) -> str | None:
-    """Extract location from post body."""
+    """Extract location from post body — label pattern then city scan."""
     text = re.sub(r"<[^>]+>", " ", html)
     match = _LOCATION_PATTERN.search(text)
     if match:
-        loc = match.group(1).strip()
-        # Clean up common noise
+        loc = match.group(1).strip().rstrip(".,;")
         loc = re.sub(r"\s+", " ", loc)
-        return loc[:100] if loc else None
+        if len(loc) >= 3:
+            return loc[:50]
+
+    # Fallback: scan for known Indian city names
+    text_lower = text.lower()
+    for city in _INDIAN_CITIES:
+        if re.search(rf"\b{re.escape(city)}\b", text_lower):
+            return city.title()
+
     return None
 
 

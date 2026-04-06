@@ -326,6 +326,8 @@ def deals(
     api_key = config.groq_api_key if ai else ""
 
     async def _score_all() -> list[tuple]:
+        from deal_hunter.db.engine import record_price
+
         scored: list[tuple] = []
         for listing in all_listings:
             analysis = await analyze_deal_async(
@@ -336,7 +338,21 @@ def deals(
                 normalizer=normalizer,
                 ai_api_key=api_key,
             )
-            if analysis and analysis.deal_score >= min_score:
+            if analysis is None:
+                continue
+
+            # Record price for history tracking
+            record_price(
+                engine,
+                canonical_name=analysis.canonical_name,
+                price=analysis.asking_price,
+                category=analysis.category,
+                source=listing.source,
+                listing_url=listing.url,
+                location=listing.location,
+            )
+
+            if analysis.deal_score >= min_score:
                 scored.append((listing, analysis))
         return scored
 
@@ -446,6 +462,95 @@ def watch(
 
     except KeyboardInterrupt:
         console.print("\n[bold]Watch stopped.[/]")
+
+
+@app.command()
+def history(
+    query: Annotated[str, typer.Argument(help="Product name to look up (e.g. 'RTX 3060')")],
+) -> None:
+    """Show price history for a product."""
+    from deal_hunter.config import AppConfig
+    from deal_hunter.db.engine import get_engine, get_price_history, get_price_summary
+
+    config = AppConfig()
+    engine = get_engine(config.db_path)
+
+    # Normalize the query to canonical name
+    normalizer = HardwareNormalizer()
+    hw = normalizer.normalize(query)
+    name = hw.canonical_name if hw else query
+
+    summary = get_price_summary(engine, name)
+    if not summary:
+        console.print(f"[yellow]No price history for '{name}'.[/]")
+        console.print("Tip: Run 'deal-hunter deals --ai' to record prices as listings are scored.")
+        return
+
+    console.print(f"\n[bold cyan]{name}[/] — {summary['count']} observations")
+    stats_table = Table(show_header=False, box=None, padding=(0, 2))
+    stats_table.add_column("Label", style="dim")
+    stats_table.add_column("Value", justify="right")
+    stats_table.add_row("Lowest", f"₹{summary['min_price']:,}")
+    stats_table.add_row("Average", f"₹{summary['avg_price']:,}")
+    stats_table.add_row("Highest", f"₹{summary['max_price']:,}")
+    console.print(stats_table)
+
+    entries = get_price_history(engine, name, limit=20)
+    if entries:
+        console.print()
+        hist_table = Table(title="Recent Prices", show_lines=True)
+        hist_table.add_column("Date", width=12)
+        hist_table.add_column("Price", width=12, justify="right")
+        hist_table.add_column("Source", width=12)
+        hist_table.add_column("Location", width=15)
+
+        for e in entries:
+            hist_table.add_row(
+                e.observed_at.strftime("%Y-%m-%d"),
+                f"₹{e.price:,.0f}",
+                e.source,
+                e.location or "—",
+            )
+        console.print(hist_table)
+    console.print()
+
+
+@app.command(name="setup-telegram")
+def setup_telegram() -> None:
+    """Test Telegram bot connection and show setup instructions."""
+    import asyncio
+
+    from deal_hunter.config import AppConfig
+    from deal_hunter.notifications.telegram import send_summary
+
+    config = AppConfig()
+
+    if not config.telegram.bot_token or not config.telegram.chat_id:
+        console.print("[bold]Telegram Setup Guide[/]\n")
+        console.print("1. Open Telegram, search for [bold]@BotFather[/]")
+        console.print("2. Send [bold]/newbot[/], follow prompts to create a bot")
+        console.print("3. Copy the bot token (looks like [dim]123456:ABC-DEF...[/])")
+        console.print("4. Start a chat with your bot, send any message")
+        console.print("5. Get your chat ID: visit [dim]https://api.telegram.org/bot<TOKEN>/getUpdates[/]")
+        console.print("6. Update your [bold].env[/] file:\n")
+        console.print("   DEAL_HUNTER_TELEGRAM__ENABLED=true")
+        console.print("   DEAL_HUNTER_TELEGRAM__BOT_TOKEN=your_token_here")
+        console.print("   DEAL_HUNTER_TELEGRAM__CHAT_ID=your_chat_id_here")
+        return
+
+    console.print("[bold]Testing Telegram connection...[/]")
+    success = asyncio.run(send_summary(
+        bot_token=config.telegram.bot_token,
+        chat_id=config.telegram.chat_id,
+        total_scraped=0,
+        deals_found=0,
+        top_deals=[],
+    ))
+
+    if success:
+        console.print("[green]Telegram bot is working![/] You'll get deal alerts with --notify.")
+    else:
+        console.print("[red]Failed to send test message.[/] Check your bot token and chat ID.")
 
 
 @app.command()

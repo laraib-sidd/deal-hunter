@@ -42,3 +42,18 @@ class Listing(SQLModel, table=True):
         """Compute a dedup fingerprint from normalized fields."""
         normalized = f"{title.lower().strip()}|{price}|{(location or '').lower().strip()}"
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+class PriceSnapshot(SQLModel, table=True):
+    """Historical price observation for a product across sources."""
+
+    __tablename__ = "price_history"
+
+    id: int | None = Field(default=None, primary_key=True)
+    canonical_name: str = Field(index=True)
+    category: str = ""
+    source: str = ""
+    price: float
+    listing_url: str = ""
+    location: str | None = None
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

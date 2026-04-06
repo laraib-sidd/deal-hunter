@@ -5,14 +5,10 @@ from __future__ import annotations
 import json
 import logging
 
-import httpx
-
+from deal_hunter.analysis.groq_client import extract_content, groq_chat
 from deal_hunter.analysis.normalizer import HardwareMatch
 
 logger = logging.getLogger(__name__)
-
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 PROMPT = """Identify this product from a second-hand listing in India.
 
@@ -34,47 +30,25 @@ async def ai_normalize(
     title: str,
     description: str = "",
     api_key: str = "",
-    model: str = DEFAULT_MODEL,
+    model: str = "meta-llama/llama-4-scout-17b-16e-instruct",
 ) -> HardwareMatch | None:
     """Use Groq to identify unknown hardware. Returns HardwareMatch or None."""
     if not api_key:
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": PROMPT.format(
-                        title=title[:200],
-                        description=description[:500],
-                    )}],
-                    "max_tokens": 300,
-                    "temperature": 0.1,
-                    "response_format": {"type": "json_object"},
-                },
-            )
-
-        if resp.status_code != 200:
-            logger.debug("AI normalize failed: %d %s", resp.status_code, resp.text[:100])
+        response = await groq_chat(
+            api_key=api_key,
+            model=model,
+            messages=[{"role": "user", "content": PROMPT.format(
+                title=title[:200],
+                description=description[:500],
+            )}],
+        )
+        if response is None:
             return None
 
-        data = resp.json()
-        text = data["choices"][0]["message"]["content"]
-
-        # Groq JSON mode guarantees valid JSON, but handle code blocks just in case
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        text = text.strip()
-
-        result = json.loads(text)
+        result = json.loads(extract_content(response))
 
         release = result.get("release_year") or "2023"
         release = str(release).strip()
@@ -91,9 +65,9 @@ async def ai_normalize(
             generation=result.get("generation") or "",
             msrp_inr=int(result.get("msrp_inr") or 0),
             release_date=str(release),
-            confidence=0.75,  # AI-identified, lower than regex match
+            confidence=0.75,
         )
 
-    except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+    except (json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.debug("AI normalize error: %s", exc)
         return None
