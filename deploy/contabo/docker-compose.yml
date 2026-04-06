@@ -1,0 +1,33 @@
+services:
+  deal-hunter:
+    image: ghcr.io/laraib-sidd/deal-hunter:latest
+    container_name: deal-hunter
+    restart: "no"  # cron triggers runs, not restart policy
+    env_file: .env
+    volumes:
+      - deal-hunter-data:/data
+    # Default entrypoint runs the full pipeline: scrape -> score -> notify
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "[$(date)] Starting deal-hunter run..."
+        deal-hunter scrape && \
+        deal-hunter deals --ai --min-score 5 --notify && \
+        echo "[$(date)] Run complete."
+
+  # Watchtower for auto-deploy (reuses the one from sidekick if already running)
+  # Uncomment only if sidekick's watchtower isn't watching this container
+  # watchtower:
+  #   image: containrrr/watchtower:latest
+  #   container_name: deal-hunter-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - WATCHTOWER_CLEANUP=true
+  #     - WATCHTOWER_LABEL_ENABLE=false
+  #     - WATCHTOWER_SCOPE=deal-hunter
+  #   command: --interval 300 deal-hunter
+
+volumes:
+  deal-hunter-data:
