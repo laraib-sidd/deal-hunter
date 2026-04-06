@@ -13,20 +13,37 @@ from deal_hunter.scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SUBREDDITS = ["IndianGaming", "hwswapindia", "hardwareswapindia"]
-DEFAULT_LIMIT = 100  # posts per subreddit batch
+DEFAULT_SUBREDDITS = [
+    "IndianGaming",          # 800K+ members, deal/sale posts mixed in
+    "hwswapindia",           # Dedicated India hardware swap
+    "hardwareswapindia",     # Another India swap sub
+    "indiangamingdeals",     # Deals-focused
+    "techdeals",             # General tech deals
+    "IndianTechDeals",       # India tech deals
+    "GameDealsIndia",        # India game/hardware deals
+]
+DEFAULT_LIMIT = 200  # posts per subreddit batch
 
-# Sale intent detection
+# Sale intent detection — broader to catch more listing styles
 _SALE_PATTERNS = re.compile(
-    r"(?:\b(?:sell(?:ing)?|wts|fs|for\s+sale|wtb|want\s+to\s+buy|buying|looking\s+for)\b|\[h\]|\[w\])",
+    r"(?:"
+    r"\b(?:sell(?:ing)?|sold|wts|fs|for\s+sale|wtb|want\s+to\s+buy|buying|looking\s+for)\b"
+    r"|\[h\]|\[w\]|\[fs\]|\[wts\]|\[wtb\]"
+    r"|\b(?:deal|offer|price|asking|budget|under\s+\d)"
+    r"|\b(?:₹|rs\.?|inr)\s*\d"  # any price mention = likely a sale
+    r")",
     re.IGNORECASE,
 )
 
-# Hardware keywords
+# Hardware keywords — expanded
 _HARDWARE_PATTERNS = re.compile(
-    r"\b(?:gpu|cpu|ram|ssd|hdd|motherboard|mobo|psu|monitor|keyboard|mouse|cabinet|case|"
+    r"\b(?:gpu|cpu|ram|ssd|hdd|nvme|motherboard|mobo|psu|monitor|keyboard|mouse|cabinet|case|"
     r"rtx|gtx|rx\s?\d{3,4}|ryzen|intel|amd|nvidia|geforce|radeon|"
-    r"laptop|thinkpad|macbook|asus|msi|dell|hp|lenovo|acer)\b",
+    r"headphone|headset|earphone|speaker|webcam|controller|joystick|"
+    r"router|wifi|ups|cooler|aio|fan|"
+    r"laptop|thinkpad|macbook|asus|msi|dell|hp|lenovo|acer|"
+    r"iphone|ipad|pixel|samsung|oneplus|realme|poco|"
+    r"gaming\s+(?:pc|chair|desk)|build|rig|setup)\b",
     re.IGNORECASE,
 )
 
@@ -36,6 +53,9 @@ _PRICE_PATTERNS = [
     re.compile(r"([\d,]+)\s*(?:rs\.?|inr|₹)", re.IGNORECASE),
     re.compile(r"(?:price|asking|expected)\s*[:=\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", re.IGNORECASE),
 ]
+
+# "15k" / "25K" style prices common in Indian posts
+_K_PRICE_PATTERN = re.compile(r"\b(\d{1,3})k\b", re.IGNORECASE)
 
 _LOCATION_PATTERN = re.compile(
     r"(?:location|city|loc|based\s+in|ship(?:ping)?\s+from)\s*[:=\-]\s*([A-Za-z][A-Za-z ]{2,25})",
@@ -76,6 +96,7 @@ def _is_hardware_sale_post(title: str, body: str) -> bool:
 
 
 def _extract_price(text: str) -> float | None:
+    # Standard INR patterns first
     for pattern in _PRICE_PATTERNS:
         match = pattern.search(text)
         if match:
@@ -86,6 +107,17 @@ def _extract_price(text: str) -> float | None:
                     return price
             except ValueError:
                 continue
+
+    # "15k" / "25K" style (multiply by 1000)
+    k_match = _K_PRICE_PATTERN.search(text)
+    if k_match:
+        try:
+            price = int(k_match.group(1)) * 1000
+            if 1000 <= price <= 500_000:
+                return float(price)
+        except ValueError:
+            pass
+
     return None
 
 
