@@ -1,0 +1,578 @@
+{
+  "gpu": [
+    {
+      "id": "nvidia-rtx-4090",
+      "name": "NVIDIA GeForce RTX 4090",
+      "aliases": ["rtx 4090", "4090", "geforce rtx 4090", "nvidia 4090"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2022-10",
+      "msrp_inr": 159900,
+      "specs": {"vram_gb": 24, "tdp_w": 450}
+    },
+    {
+      "id": "nvidia-rtx-4080-super",
+      "name": "NVIDIA GeForce RTX 4080 Super",
+      "aliases": ["rtx 4080 super", "4080 super", "4080s"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2024-01",
+      "msrp_inr": 99900,
+      "specs": {"vram_gb": 16, "tdp_w": 320}
+    },
+    {
+      "id": "nvidia-rtx-4080",
+      "name": "NVIDIA GeForce RTX 4080",
+      "aliases": ["rtx 4080", "4080", "geforce rtx 4080", "nvidia 4080"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2022-11",
+      "msrp_inr": 119900,
+      "specs": {"vram_gb": 16, "tdp_w": 320}
+    },
+    {
+      "id": "nvidia-rtx-4070-ti-super",
+      "name": "NVIDIA GeForce RTX 4070 Ti Super",
+      "aliases": ["rtx 4070 ti super", "4070 ti super", "4070tis"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2024-01",
+      "msrp_inr": 84900,
+      "specs": {"vram_gb": 16, "tdp_w": 285}
+    },
+    {
+      "id": "nvidia-rtx-4070-ti",
+      "name": "NVIDIA GeForce RTX 4070 Ti",
+      "aliases": ["rtx 4070 ti", "4070 ti", "4070ti", "geforce rtx 4070ti"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2023-01",
+      "msrp_inr": 79900,
+      "specs": {"vram_gb": 12, "tdp_w": 285}
+    },
+    {
+      "id": "nvidia-rtx-4070-super",
+      "name": "NVIDIA GeForce RTX 4070 Super",
+      "aliases": ["rtx 4070 super", "4070 super", "4070s"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2024-01",
+      "msrp_inr": 59900,
+      "specs": {"vram_gb": 12, "tdp_w": 220}
+    },
+    {
+      "id": "nvidia-rtx-4070",
+      "name": "NVIDIA GeForce RTX 4070",
+      "aliases": ["rtx 4070", "4070", "geforce rtx 4070", "nvidia 4070"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2023-04",
+      "msrp_inr": 59900,
+      "specs": {"vram_gb": 12, "tdp_w": 200}
+    },
+    {
+      "id": "nvidia-rtx-4060-ti",
+      "name": "NVIDIA GeForce RTX 4060 Ti",
+      "aliases": ["rtx 4060 ti", "4060 ti", "4060ti"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2023-05",
+      "msrp_inr": 41900,
+      "specs": {"vram_gb": 8, "tdp_w": 160}
+    },
+    {
+      "id": "nvidia-rtx-4060",
+      "name": "NVIDIA GeForce RTX 4060",
+      "aliases": ["rtx 4060", "4060", "geforce rtx 4060", "nvidia 4060"],
+      "brand": "NVIDIA",
+      "series": "RTX 40",
+      "generation": "Ada Lovelace",
+      "release_date": "2023-06",
+      "msrp_inr": 29900,
+      "specs": {"vram_gb": 8, "tdp_w": 115}
+    },
+    {
+      "id": "nvidia-rtx-3090",
+      "name": "NVIDIA GeForce RTX 3090",
+      "aliases": ["rtx 3090", "3090", "geforce rtx 3090", "nvidia 3090"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2020-09",
+      "msrp_inr": 149900,
+      "specs": {"vram_gb": 24, "tdp_w": 350}
+    },
+    {
+      "id": "nvidia-rtx-3080-ti",
+      "name": "NVIDIA GeForce RTX 3080 Ti",
+      "aliases": ["rtx 3080 ti", "3080 ti", "3080ti"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2021-06",
+      "msrp_inr": 112900,
+      "specs": {"vram_gb": 12, "tdp_w": 350}
+    },
+    {
+      "id": "nvidia-rtx-3080",
+      "name": "NVIDIA GeForce RTX 3080",
+      "aliases": ["rtx 3080", "3080", "geforce rtx 3080", "nvidia 3080"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2020-09",
+      "msrp_inr": 62000,
+      "specs": {"vram_gb": 10, "tdp_w": 320}
+    },
+    {
+      "id": "nvidia-rtx-3070-ti",
+      "name": "NVIDIA GeForce RTX 3070 Ti",
+      "aliases": ["rtx 3070 ti", "3070 ti", "3070ti"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2021-06",
+      "msrp_inr": 52000,
+      "specs": {"vram_gb": 8, "tdp_w": 290}
+    },
+    {
+      "id": "nvidia-rtx-3070",
+      "name": "NVIDIA GeForce RTX 3070",
+      "aliases": ["rtx 3070", "3070", "geforce rtx 3070", "nvidia 3070"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2020-10",
+      "msrp_inr": 44500,
+      "specs": {"vram_gb": 8, "tdp_w": 220}
+    },
+    {
+      "id": "nvidia-rtx-3060-ti",
+      "name": "NVIDIA GeForce RTX 3060 Ti",
+      "aliases": ["rtx 3060 ti", "3060 ti", "3060ti"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2020-12",
+      "msrp_inr": 35900,
+      "specs": {"vram_gb": 8, "tdp_w": 200}
+    },
+    {
+      "id": "nvidia-rtx-3060",
+      "name": "NVIDIA GeForce RTX 3060",
+      "aliases": ["rtx 3060", "3060", "geforce rtx 3060", "nvidia 3060", "3060 12gb"],
+      "brand": "NVIDIA",
+      "series": "RTX 30",
+      "generation": "Ampere",
+      "release_date": "2021-02",
+      "msrp_inr": 29500,
+      "specs": {"vram_gb": 12, "tdp_w": 170}
+    },
+    {
+      "id": "nvidia-gtx-1660-super",
+      "name": "NVIDIA GeForce GTX 1660 Super",
+      "aliases": ["gtx 1660 super", "1660 super", "1660s"],
+      "brand": "NVIDIA",
+      "series": "GTX 16",
+      "generation": "Turing",
+      "release_date": "2019-10",
+      "msrp_inr": 20000,
+      "specs": {"vram_gb": 6, "tdp_w": 125}
+    },
+    {
+      "id": "nvidia-gtx-1650",
+      "name": "NVIDIA GeForce GTX 1650",
+      "aliases": ["gtx 1650", "1650", "geforce gtx 1650"],
+      "brand": "NVIDIA",
+      "series": "GTX 16",
+      "generation": "Turing",
+      "release_date": "2019-04",
+      "msrp_inr": 12500,
+      "specs": {"vram_gb": 4, "tdp_w": 75}
+    },
+    {
+      "id": "amd-rx-7900-xtx",
+      "name": "AMD Radeon RX 7900 XTX",
+      "aliases": ["rx 7900 xtx", "7900 xtx", "radeon 7900 xtx"],
+      "brand": "AMD",
+      "series": "RX 7000",
+      "generation": "RDNA 3",
+      "release_date": "2022-12",
+      "msrp_inr": 89900,
+      "specs": {"vram_gb": 24, "tdp_w": 355}
+    },
+    {
+      "id": "amd-rx-7800-xt",
+      "name": "AMD Radeon RX 7800 XT",
+      "aliases": ["rx 7800 xt", "7800 xt", "radeon 7800 xt"],
+      "brand": "AMD",
+      "series": "RX 7000",
+      "generation": "RDNA 3",
+      "release_date": "2023-09",
+      "msrp_inr": 49900,
+      "specs": {"vram_gb": 16, "tdp_w": 263}
+    },
+    {
+      "id": "amd-rx-7600",
+      "name": "AMD Radeon RX 7600",
+      "aliases": ["rx 7600", "7600", "radeon 7600"],
+      "brand": "AMD",
+      "series": "RX 7000",
+      "generation": "RDNA 3",
+      "release_date": "2023-05",
+      "msrp_inr": 27500,
+      "specs": {"vram_gb": 8, "tdp_w": 165}
+    },
+    {
+      "id": "amd-rx-6800-xt",
+      "name": "AMD Radeon RX 6800 XT",
+      "aliases": ["rx 6800 xt", "6800 xt", "radeon 6800 xt"],
+      "brand": "AMD",
+      "series": "RX 6000",
+      "generation": "RDNA 2",
+      "release_date": "2020-11",
+      "msrp_inr": 55000,
+      "specs": {"vram_gb": 16, "tdp_w": 300}
+    },
+    {
+      "id": "amd-rx-6700-xt",
+      "name": "AMD Radeon RX 6700 XT",
+      "aliases": ["rx 6700 xt", "6700 xt", "radeon 6700 xt"],
+      "brand": "AMD",
+      "series": "RX 6000",
+      "generation": "RDNA 2",
+      "release_date": "2021-03",
+      "msrp_inr": 38000,
+      "specs": {"vram_gb": 12, "tdp_w": 230}
+    },
+    {
+      "id": "amd-rx-580",
+      "name": "AMD Radeon RX 580",
+      "aliases": ["rx 580", "580", "radeon rx 580", "rx580"],
+      "brand": "AMD",
+      "series": "RX 500",
+      "generation": "Polaris",
+      "release_date": "2017-04",
+      "msrp_inr": 18000,
+      "specs": {"vram_gb": 8, "tdp_w": 185}
+    }
+  ],
+  "cpu": [
+    {
+      "id": "amd-ryzen-9-7950x",
+      "name": "AMD Ryzen 9 7950X",
+      "aliases": ["ryzen 9 7950x", "7950x", "r9 7950x"],
+      "brand": "AMD",
+      "series": "Ryzen 9",
+      "generation": "Zen 4",
+      "release_date": "2022-09",
+      "msrp_inr": 54900,
+      "specs": {"cores": 16, "threads": 32, "tdp_w": 170}
+    },
+    {
+      "id": "amd-ryzen-7-7800x3d",
+      "name": "AMD Ryzen 7 7800X3D",
+      "aliases": ["ryzen 7 7800x3d", "7800x3d", "r7 7800x3d"],
+      "brand": "AMD",
+      "series": "Ryzen 7",
+      "generation": "Zen 4",
+      "release_date": "2023-04",
+      "msrp_inr": 38900,
+      "specs": {"cores": 8, "threads": 16, "tdp_w": 120}
+    },
+    {
+      "id": "amd-ryzen-7-5800x",
+      "name": "AMD Ryzen 7 5800X",
+      "aliases": ["ryzen 7 5800x", "5800x", "r7 5800x"],
+      "brand": "AMD",
+      "series": "Ryzen 7",
+      "generation": "Zen 3",
+      "release_date": "2020-11",
+      "msrp_inr": 34000,
+      "specs": {"cores": 8, "threads": 16, "tdp_w": 105}
+    },
+    {
+      "id": "amd-ryzen-5-7600x",
+      "name": "AMD Ryzen 5 7600X",
+      "aliases": ["ryzen 5 7600x", "7600x", "r5 7600x"],
+      "brand": "AMD",
+      "series": "Ryzen 5",
+      "generation": "Zen 4",
+      "release_date": "2022-09",
+      "msrp_inr": 24900,
+      "specs": {"cores": 6, "threads": 12, "tdp_w": 105}
+    },
+    {
+      "id": "amd-ryzen-5-5600x",
+      "name": "AMD Ryzen 5 5600X",
+      "aliases": ["ryzen 5 5600x", "5600x", "r5 5600x"],
+      "brand": "AMD",
+      "series": "Ryzen 5",
+      "generation": "Zen 3",
+      "release_date": "2020-11",
+      "msrp_inr": 22900,
+      "specs": {"cores": 6, "threads": 12, "tdp_w": 65}
+    },
+    {
+      "id": "amd-ryzen-5-5600",
+      "name": "AMD Ryzen 5 5600",
+      "aliases": ["ryzen 5 5600", "5600", "r5 5600"],
+      "brand": "AMD",
+      "series": "Ryzen 5",
+      "generation": "Zen 3",
+      "release_date": "2022-04",
+      "msrp_inr": 16500,
+      "specs": {"cores": 6, "threads": 12, "tdp_w": 65}
+    },
+    {
+      "id": "intel-i9-14900k",
+      "name": "Intel Core i9-14900K",
+      "aliases": ["i9 14900k", "14900k", "core i9 14900k", "intel 14900k"],
+      "brand": "Intel",
+      "series": "Core i9",
+      "generation": "14th Gen",
+      "release_date": "2023-10",
+      "msrp_inr": 51900,
+      "specs": {"cores": 24, "threads": 32, "tdp_w": 253}
+    },
+    {
+      "id": "intel-i7-14700k",
+      "name": "Intel Core i7-14700K",
+      "aliases": ["i7 14700k", "14700k", "core i7 14700k", "intel 14700k"],
+      "brand": "Intel",
+      "series": "Core i7",
+      "generation": "14th Gen",
+      "release_date": "2023-10",
+      "msrp_inr": 37900,
+      "specs": {"cores": 20, "threads": 28, "tdp_w": 253}
+    },
+    {
+      "id": "intel-i5-14600k",
+      "name": "Intel Core i5-14600K",
+      "aliases": ["i5 14600k", "14600k", "core i5 14600k", "intel 14600k"],
+      "brand": "Intel",
+      "series": "Core i5",
+      "generation": "14th Gen",
+      "release_date": "2023-10",
+      "msrp_inr": 25900,
+      "specs": {"cores": 14, "threads": 20, "tdp_w": 181}
+    },
+    {
+      "id": "intel-i5-13400f",
+      "name": "Intel Core i5-13400F",
+      "aliases": ["i5 13400f", "13400f", "core i5 13400f", "intel 13400f"],
+      "brand": "Intel",
+      "series": "Core i5",
+      "generation": "13th Gen",
+      "release_date": "2023-01",
+      "msrp_inr": 16000,
+      "specs": {"cores": 10, "threads": 16, "tdp_w": 148}
+    },
+    {
+      "id": "intel-i5-12400f",
+      "name": "Intel Core i5-12400F",
+      "aliases": ["i5 12400f", "12400f", "core i5 12400f", "intel 12400f"],
+      "brand": "Intel",
+      "series": "Core i5",
+      "generation": "12th Gen",
+      "release_date": "2022-01",
+      "msrp_inr": 14500,
+      "specs": {"cores": 6, "threads": 12, "tdp_w": 117}
+    },
+    {
+      "id": "amd-ryzen-9-5900x",
+      "name": "AMD Ryzen 9 5900X",
+      "aliases": ["ryzen 9 5900x", "5900x", "r9 5900x"],
+      "brand": "AMD",
+      "series": "Ryzen 9",
+      "generation": "Zen 3",
+      "release_date": "2020-11",
+      "msrp_inr": 44900,
+      "specs": {"cores": 12, "threads": 24, "tdp_w": 105}
+    }
+  ],
+  "ram": [
+    {
+      "id": "ddr5-32gb-6000",
+      "name": "DDR5 32GB (2x16GB) 6000MHz Kit",
+      "aliases": ["ddr5 32gb", "32gb ddr5 6000", "ddr5 6000 32gb"],
+      "brand": "Generic",
+      "series": "DDR5",
+      "generation": "DDR5",
+      "release_date": "2022-01",
+      "msrp_inr": 9500,
+      "specs": {"capacity_gb": 32, "speed_mhz": 6000}
+    },
+    {
+      "id": "ddr5-16gb-5600",
+      "name": "DDR5 16GB (2x8GB) 5600MHz Kit",
+      "aliases": ["ddr5 16gb", "16gb ddr5", "ddr5 5600 16gb"],
+      "brand": "Generic",
+      "series": "DDR5",
+      "generation": "DDR5",
+      "release_date": "2022-01",
+      "msrp_inr": 5000,
+      "specs": {"capacity_gb": 16, "speed_mhz": 5600}
+    },
+    {
+      "id": "ddr4-32gb-3200",
+      "name": "DDR4 32GB (2x16GB) 3200MHz Kit",
+      "aliases": ["ddr4 32gb", "32gb ddr4", "ddr4 3200 32gb"],
+      "brand": "Generic",
+      "series": "DDR4",
+      "generation": "DDR4",
+      "release_date": "2020-01",
+      "msrp_inr": 6500,
+      "specs": {"capacity_gb": 32, "speed_mhz": 3200}
+    },
+    {
+      "id": "ddr4-16gb-3200",
+      "name": "DDR4 16GB (2x8GB) 3200MHz Kit",
+      "aliases": ["ddr4 16gb", "16gb ddr4", "ddr4 3200 16gb"],
+      "brand": "Generic",
+      "series": "DDR4",
+      "generation": "DDR4",
+      "release_date": "2020-01",
+      "msrp_inr": 3500,
+      "specs": {"capacity_gb": 16, "speed_mhz": 3200}
+    }
+  ],
+  "ssd": [
+    {
+      "id": "nvme-1tb-gen4",
+      "name": "NVMe SSD 1TB PCIe Gen4",
+      "aliases": ["1tb nvme", "1tb ssd gen4", "1tb pcie 4.0 ssd", "1tb m.2 nvme"],
+      "brand": "Generic",
+      "series": "NVMe Gen4",
+      "generation": "PCIe 4.0",
+      "release_date": "2021-01",
+      "msrp_inr": 7500,
+      "specs": {"capacity_gb": 1000, "interface": "PCIe 4.0"}
+    },
+    {
+      "id": "nvme-2tb-gen4",
+      "name": "NVMe SSD 2TB PCIe Gen4",
+      "aliases": ["2tb nvme", "2tb ssd gen4", "2tb pcie 4.0 ssd"],
+      "brand": "Generic",
+      "series": "NVMe Gen4",
+      "generation": "PCIe 4.0",
+      "release_date": "2021-01",
+      "msrp_inr": 13000,
+      "specs": {"capacity_gb": 2000, "interface": "PCIe 4.0"}
+    },
+    {
+      "id": "sata-1tb",
+      "name": "SATA SSD 1TB",
+      "aliases": ["1tb sata ssd", "1tb ssd sata", "1tb 2.5 ssd"],
+      "brand": "Generic",
+      "series": "SATA",
+      "generation": "SATA III",
+      "release_date": "2019-01",
+      "msrp_inr": 5000,
+      "specs": {"capacity_gb": 1000, "interface": "SATA III"}
+    }
+  ],
+  "monitor": [
+    {
+      "id": "monitor-27-1440p-165hz",
+      "name": "27\" 1440p 165Hz IPS Monitor",
+      "aliases": ["27 inch 1440p", "27 qhd 165hz", "1440p 165hz monitor"],
+      "brand": "Generic",
+      "series": "Gaming Monitor",
+      "generation": "1440p",
+      "release_date": "2022-01",
+      "msrp_inr": 22000,
+      "specs": {"size_inches": 27, "resolution": "2560x1440", "refresh_hz": 165}
+    },
+    {
+      "id": "monitor-24-1080p-144hz",
+      "name": "24\" 1080p 144Hz IPS Monitor",
+      "aliases": ["24 inch 1080p", "24 fhd 144hz", "1080p 144hz monitor"],
+      "brand": "Generic",
+      "series": "Gaming Monitor",
+      "generation": "1080p",
+      "release_date": "2021-01",
+      "msrp_inr": 13000,
+      "specs": {"size_inches": 24, "resolution": "1920x1080", "refresh_hz": 144}
+    }
+  ],
+  "motherboard": [
+    {
+      "id": "b650-am5",
+      "name": "AMD B650 Motherboard (AM5)",
+      "aliases": ["b650", "b650 motherboard", "am5 b650"],
+      "brand": "AMD",
+      "series": "B650",
+      "generation": "AM5",
+      "release_date": "2022-10",
+      "msrp_inr": 16000,
+      "specs": {"socket": "AM5", "chipset": "B650"}
+    },
+    {
+      "id": "b550-am4",
+      "name": "AMD B550 Motherboard (AM4)",
+      "aliases": ["b550", "b550 motherboard", "am4 b550"],
+      "brand": "AMD",
+      "series": "B550",
+      "generation": "AM4",
+      "release_date": "2020-06",
+      "msrp_inr": 12000,
+      "specs": {"socket": "AM4", "chipset": "B550"}
+    },
+    {
+      "id": "b660-lga1700",
+      "name": "Intel B660 Motherboard (LGA 1700)",
+      "aliases": ["b660", "b660 motherboard", "lga 1700 b660"],
+      "brand": "Intel",
+      "series": "B660",
+      "generation": "LGA 1700",
+      "release_date": "2022-01",
+      "msrp_inr": 12500,
+      "specs": {"socket": "LGA 1700", "chipset": "B660"}
+    }
+  ],
+  "psu": [
+    {
+      "id": "psu-750w-80plus-gold",
+      "name": "750W 80+ Gold PSU",
+      "aliases": ["750w psu", "750w gold", "750w 80 plus gold"],
+      "brand": "Generic",
+      "series": "80+ Gold",
+      "generation": "ATX",
+      "release_date": "2021-01",
+      "msrp_inr": 7500,
+      "specs": {"wattage": 750, "rating": "80+ Gold"}
+    },
+    {
+      "id": "psu-650w-80plus-bronze",
+      "name": "650W 80+ Bronze PSU",
+      "aliases": ["650w psu", "650w bronze", "650w 80 plus bronze"],
+      "brand": "Generic",
+      "series": "80+ Bronze",
+      "generation": "ATX",
+      "release_date": "2021-01",
+      "msrp_inr": 4500,
+      "specs": {"wattage": 650, "rating": "80+ Bronze"}
+    }
+  ],
+  "mining_popular_gpus": [
+    "nvidia-rtx-3060-ti",
+    "nvidia-rtx-3070",
+    "nvidia-rtx-3080",
+    "amd-rx-580",
+    "amd-rx-6700-xt",
+    "amd-rx-6800-xt"
+  ],
+  "city_tiers": {
+    "tier_1": ["mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "chennai", "kolkata", "pune"],
+    "tier_2": ["ahmedabad", "jaipur", "lucknow", "chandigarh", "kochi", "indore", "nagpur", "coimbatore", "vadodara", "gurgaon", "noida", "ghaziabad", "thane", "navi mumbai"]
+  }
+}
