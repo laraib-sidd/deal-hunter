@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Hero stat cards -->
+<div class="cards">
+  <div class="card"><div class="lbl">New / 24h</div><div class="num">{{ overview.scraped_24h }}</div><div class="delta-line"><span class="delta delta-good">↓ live scan</span></div></div>
+  <div class="card"><div class="lbl">Active listings</div><div class="num">{{ overview.active }}</div><div class="delta-line"><span class="faint">tracked</span></div></div>
+  <div class="card accent-border"><div class="lbl">Deals <span class="faint">score≥6</span></div><div class="num sig-buy">{{ overview.active_deals }}</div><div class="delta-line"><span class="delta delta-good">▲ buy signals</span></div></div>
+  <div class="card"><div class="lbl">Sellers</div><div class="num">{{ overview.sellers }}</div><div class="delta-line"><span class="faint">tracked</span></div></div>
+  <div class="card"><div class="lbl">Active watches</div><div class="num">{{ overview.watches }}</div><div class="delta-line"><span class="faint">{{ overview.watch_hits }} hits</span></div></div>
+</div>
+
+{% if overview.scraped_24h == 0 and overview.total == 0 %}
+<div class="banner info" style="margin-top:16px">Nothing scanned yet. <code class="mono">deal-hunter scrape</code> to start.</div>
+{% endif %}
+
+<div class="grid grid-main" style="margin-top:20px">
+  <!-- Latest listings -->
+  <section class="stack">
+    <div class="section-title"><span>Latest listings</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>Listing</th><th>Price</th><th>Source</th><th>Verdict</th><th>Score</th></tr></thead>
+        <tbody>
+        {% for l in listings %}
+          <tr>
+            <td>
+              {% if l.canonical_name %}<a class="link" href="/product/{{ l.canonical_name }}">{{ l.canonical_name }}</a>
+              {% else %}<a class="link" href="{{ l.url }}" target="_blank" rel="noopener">{{ l.title[:52] }}</a>{% endif %}
+              <div class="faint" style="font-size:11px;margin-top:2px">{{ l.source }} · {{ fmt_dt(l.scraped_at) }}{% if l.location %} · {{ l.location }}{% endif %}</div>
+            </td>
+            <td class="mono-num">{% if l.price %}₹{{ "{:,.0f}".format(l.price) }}{% else %}<span class="faint">—</span>{% endif %}</td>
+            <td><span class="source-pill running"><span class="dot"></span>{{ l.source }}</span></td>
+            <td>{{ verdict_chip(l.deal_verdict) }}</td>
+            <td class="mono-num">{{ score_display(l.deal_score) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Right rail -->
+  <div class="stack">
+    <section class="stack">
+      <div class="section-title"><span>Market pulse</span></div>
+      <div class="stack" style="gap:8px">
+      {% for name, count in top_canonical[:8] %}
+        <a class="link" href="/product/{{ name }}" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">{{ name[:34] }}</span><span class="faint mono">{{ count }} listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:{{ (count / top_canonical[0][1] * 100) if top_canonical else 0 }}%"></div></div>
+        </a>
+      {% endfor %}
+      {% if not top_canonical %}<div class="empty"><p>No canonical products yet.</p><p class="hint">Run scoring to build the market map.</p></div>{% endif %}
+      </div>
+    </section>
+
+    <section class="stack">
+      <div class="section-title"><span>By source</span></div>
+      {% for src, count in sources %}
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+        <span class="source-pill running"><span class="dot"></span>{{ src }}</span>
+        <span class="muted" style="margin-left:auto">{{ count }}</span>
+      </div>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}

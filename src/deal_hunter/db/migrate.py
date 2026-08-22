@@ -1,0 +1,44 @@
+"""Lightweight SQLite migrations for the v2 schema.
+
+SQLModel.create_all() creates missing tables but does NOT add columns to already-existing
+tables. The local DB predates v2 (sellers/watch_rules/watch_hits tables + new listing
+columns), so we ALTER the existing `listings` table and let create_all handle new tables.
+"""
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import inspect
+
+logger = logging.getLogger(__name__)
+
+# (column, type, default) — appended to `listings` if missing.
+_LISTING_COLUMNS: list[tuple[str, str, str | None]] = [
+    ("seller_id", "INTEGER", None),
+    ("status", "VARCHAR", "'active'"),
+    ("times_seen", "INTEGER", "1"),
+    ("last_confirmed_at", "DATETIME", None),
+]
+
+
+def migrate(engine) -> None:
+    """Add missing v2 columns to listings and the dedup index if absent."""
+    insp = inspect(engine)
+    existing = {c["name"] for c in insp.get_columns("listings")}
+
+    with engine.begin() as conn:
+        for col, ctype, default in _LISTING_COLUMNS:
+            if col not in existing:
+                ddl = f'ALTER TABLE listings ADD COLUMN {col} {ctype}'
+                if default:
+                    ddl += f' DEFAULT {default}'
+                conn.execute(__import__("sqlalchemy").text(ddl))
+                logger.info("Migrated: listings.%s", col)
+
+        idx_names = {ix["name"] for ix in insp.get_indexes("listings")}
+        if "ix_listings_status" not in idx_names:
+            conn.execute(__import__("sqlalchemy").text(
+                "CREATE INDEX ix_listings_status ON listings (status)"
+            ))
+
+    logger.info("Migration complete")

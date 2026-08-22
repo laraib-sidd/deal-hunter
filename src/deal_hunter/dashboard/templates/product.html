@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ canonical }} · Deal Hunter{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+  <h1 class="h1">{{ canonical }}</h1>
+  <span class="lede">{{ listings|length }} offers tracked</span>
+</div>
+
+<!-- Live market stat cards -->
+<div class="cards" style="margin:18px 0">
+  <div class="card"><div class="lbl">Median asking</div><div class="num">{{ fmt_inr(market.median) if market else "—" }}</div></div>
+  <div class="card"><div class="lbl">25th pct</div><div class="num">{{ fmt_inr(market.p25) if market else "—" }}</div></div>
+  <div class="card"><div class="lbl">75th pct</div><div class="num">{{ fmt_inr(market.p75) if market else "—" }}</div></div>
+  <div class="card"><div class="lbl">Observations</div><div class="num">{{ market.n if market else 0 }}</div></div>
+</div>
+
+{% if not market or not market.median %}
+<div class="banner info">Live baseline needs ≥3 recent price observations. Run <code class="mono">deal-hunter deals</code> to build it.</div>
+{% endif %}
+
+<!-- Price history sparkline + offers -->
+<div class="grid grid-main" style="margin-top:8px">
+  <section class="stack">
+    <div class="section-title"><span>Offer history</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>Asking</th><th>Source</th><th>Verdict</th><th>Score</th><th>Seller</th><th>Status</th><th>Posted</th></tr></thead>
+        <tbody>
+        {% for l in listings %}
+          <tr>
+            <td class="mono-num"><a class="link" href="{{ l.url }}" target="_blank" rel="noopener">{{ fmt_inr(l.price) }}</a></td>
+            <td><span class="source-pill"><span class="dot"></span>{{ l.source }}</span></td>
+            <td>{{ verdict_chip(l.deal_verdict) }}</td>
+            <td class="mono-num">{{ score_display(l.deal_score) }}</td>
+            <td class="muted">{{ l.seller_name or "—" }}</td>
+            <td>{{ status_chip(l.status) }}</td>
+            <td class="faint">{{ fmt_dt(l.posted_at, "%d %b %Y") }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="stack">
+    <!-- Seller risk strip -->
+    <section class="stack">
+      <div class="section-title"><span>Sellers</span></div>
+      {% for s in sellers %}
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+        <span class="source-pill"><span class="dot"></span>{{ s.source }}</span>
+        <span class="{{ 'sig-scam' if s.is_suspect else '' }}">{{ s.display_name or s.source_key or "—" }}</span>
+        <span class="faint" style="margin-left:auto">{{ s.listing_count }} listings</span>
+        {% if s.is_suspect %}<span class="chip chip-scam">SUSPECT</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% if not sellers %}<div class="empty" style="padding:24px"><p class="hint">No seller identity captured for these offers.</p></div>{% endif %}
+    </section>
+  </div>
+</div>
+
+<style>
+  .grid2 { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+  @media(max-width:960px){ .grid2{grid-template-columns:1fr} }
+</style>
+{% endblock %}

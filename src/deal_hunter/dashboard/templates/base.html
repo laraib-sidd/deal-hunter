@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Deal Hunter{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============ DESIGN TOKENS (Linear-inspired calm dark) ============ */
+    :root {
+      --bg:          #0d0e0f;
+      --panel:       #141517;
+      --surface:     #18191b;
+      --surface-2:   #1e1f22;
+      --text-1:      #f7f8f8;
+      --text-2:      #b8bec8;
+      --text-3:      #8a8f98;
+      --text-4:      #5b5f66;
+      --accent:      #5e6ad2;
+      --accent-hi:   #7170ff;
+      --accent-hover:#828fff;
+      --deal-buy:     #27a644;
+      --deal-negotiate:#e8a33d;
+      --deal-pass:    #e05d5d;
+      --deal-scam:    #ff4949;
+      --border:       rgba(255,255,255,0.06);
+      --border-soft:  rgba(255,255,255,0.04);
+      --border-strong:rgba(255,255,255,0.09);
+      --r-xs: 2px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
+      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html,body { height:100%; }
+    body {
+      font-family:var(--sans);
+      background:var(--bg);
+      color:var(--text-1);
+      font-size:14px;
+      line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+      font-feature-settings:'cv01','ss03';
+    }
+    .mono { font-family:var(--mono); }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+      position:sticky; top:0; z-index:50;
+      display:flex; align-items:center; gap:20px;
+      padding:0 24px; height:52px;
+      background:rgba(13,14,15,0.85);
+      backdrop-filter:blur(12px) saturate(160%);
+      border-bottom:1px solid var(--border-soft);
+    }
+    .brand { display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em; }
+    .brand .mark { width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,var(--accent-hi),var(--accent)); display:grid; place-items:center; font-size:12px; }
+    .topnav { display:flex; gap:2px; }
+    .topnav a {
+      color:var(--text-3); text-decoration:none; font-size:13px; font-weight:500;
+      padding:6px 11px; border-radius:var(--r-sm); transition:color .12s, background .12s;
+    }
+    .topnav a:hover { color:var(--text-1); }
+    .topnav a.active { color:var(--text-1); background:var(--surface-2); }
+    .topbar .spacer { flex:1; }
+    .top-actions { display:flex; align-items:center; gap:8px; }
+    .live-pill {
+      display:inline-flex; align-items:center; gap:7px;
+      font-size:12px; color:var(--text-3); padding:4px 10px;
+      border:1px solid var(--border); border-radius:9999px; background:var(--surface);
+    }
+    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--deal-buy); box-shadow:0 0 0 3px rgba(39,166,68,.18); }
+
+    /* ---------- layout ---------- */
+    .shell { max-width:1280px; margin:0 auto; padding:24px; }
+    .grid { display:grid; gap:16px; }
+    .grid-main { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+    .stack { display:flex; flex-direction:column; gap:16px; }
+    @media(max-width:960px){ .grid-main{grid-template-columns:1fr} .topbar{padding:0 14px} .shell{padding:16px} }
+
+    /* ---------- stat cards ---------- */
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+    .card {
+      background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-md);
+      padding:16px; position:relative; overflow:hidden;
+    }
+    .card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-4); font-weight:500; }
+    .card .num { font-family:var(--mono); font-size:26px; font-weight:500; color:var(--text-1); margin-top:6px; letter-spacing:-.02em; }
+    .card .delta-line { margin-top:8px; font-size:12px; }
+    .card.accent-border { border-top:2px solid var(--accent-hi); }
+
+    /* ---------- section ---------- */
+    .section-title {
+      display:flex; align-items:baseline; justify-content:space-between;
+      margin:0 0 12px; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-4); font-weight:600;
+    }
+
+    /* ---------- table ---------- */
+    .table-wrap { border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; background:var(--surface); }
+    table.tbl { width:100%; border-collapse:collapse; }
+    .tbl th {
+      text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text-4); font-weight:500; padding:9px 14px; background:var(--surface);
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    .tbl td { padding:10px 14px; border-bottom:1px solid var(--border-soft); vertical-align:middle; font-size:13px; }
+    .tbl tbody tr:last-child td { border-bottom:none; }
+    .tbl tbody tr:hover { background:var(--surface-2); }
+    .tbl .mono-num { font-family:var(--mono); font-size:13px; white-space:nowrap; }
+
+    /* ---------- chips ---------- */
+    .chip { display:inline-block; padding:2px 8px; border-radius:var(--r-xs); font-size:11px; font-weight:500; letter-spacing:.03em; white-space:nowrap; }
+    .chip-buy { background:rgba(39,166,68,.14); color:#4ade80; }
+    .chip-negotiate { background:rgba(232,163,61,.14); color:#f5c56b; }
+    .chip-pass { background:rgba(224,93,93,.14); color:#f18484; }
+    .chip-scam { background:rgba(255,73,73,.16); color:#ff8080; }
+    .chip-neutral { background:var(--surface-2); color:var(--text-3); }
+
+    /* ---------- price delta ---------- */
+    .delta { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:500; font-family:var(--mono); }
+    .delta-good { color:#4ade80; }
+    .delta-bad { color:#ff8080; }
+    .delta-flat { color:var(--text-3); }
+
+    /* ---------- score/signal ---------- */
+    .sig-buy { color:#4ade80; }
+    .sig-negotiate { color:#f8c56b; }
+    .sig-pass { color:#ff8080; }
+    .sig-scam { color:#ff4949; }
+    .muted { color:var(--text-3); }
+    .faint { color:var(--text-4); }
+
+    /* ---------- source pill ---------- */
+    .source-pill {
+      display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+      padding:3px 10px; border:1px solid var(--border); border-radius:9999px; background:transparent;
+    }
+    .source-pill .dot { width:6px; height:6px; border-radius:50%; background:var(--text-4); }
+    .source-pill.running .dot { background:var(--deal-buy); }
+
+    /* ---------- buttons ---------- */
+    .btn {
+      display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
+      padding:7px 12px; border-radius:var(--r-sm); border:1px solid var(--border);
+      background:rgba(255,255,255,0.02); color:var(--text-1); cursor:pointer; text-decoration:none;
+      transition:background .12s, border-color .12s, color .12s;
+    }
+    .btn:hover { background:rgba(255,255,255,0.05); border-color:var(--border-strong); }
+    .btn-primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+    .btn-sm { padding:4px 9px; font-size:12px; }
+    .btn-icon { padding:5px 9px; }
+
+    /* ---------- inputs / filter bar ---------- */
+    .filterbar {
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:16px;
+    }
+    .search-input {
+      flex:1; min-width:200px; font-family:var(--sans); font-size:13px; color:var(--text-1);
+      background:transparent; border:none; padding:6px 4px; outline:none;
+    }
+    .search-input::placeholder{color:var(--text-4);}
+    select, .select {
+      font-family:var(--sans); font-size:12px; color:var(--text-2);
+      background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 10px;
+    }
+    select:focus { outline:1px solid var(--accent-hi); }
+
+    /* ---------- link ---------- */
+    a.link { color:var(--text-1); text-decoration:none; }
+    a.link:hover { color:var(--accent-hover); }
+    a.action { color:var(--accent-hi); text-decoration:none; font-size:12px; font-weight:500; }
+    a.action:hover { color:var(--accent-hover); }
+
+    /* ---------- empty state ---------- */
+    .empty { text-align:center; padding:48px 20px; color:var(--text-3); }
+    .empty .ic { font-size:30px; opacity:.6; margin-bottom:10px; }
+    .empty p { font-size:14px; }
+    .empty .hint { font-size:12px; color:var(--text-4); margin-top:6px; }
+
+    /* ---------- banner ---------- */
+    .banner {
+      display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--r-md);
+      font-size:13px; margin-bottom:16px; border:1px solid;
+    }
+    .banner.warn { background:rgba(232,163,61,.08); border-color:rgba(232,163,61,.25); color:#f8c56b; }
+    .banner.info { background:rgba(94,106,210,.08); border-color:rgba(94,106,210,.25); color:#a5adff; }
+
+    /* ---------- market pulse bar ---------- */
+    .barwrap { background:var(--surface-2); border-radius:4px; overflow:hidden; height:6px; }
+    .bar { height:100%; background:var(--accent); border-radius:4px; }
+
+    /* ---------- product / sparkline ---------- */
+    .h1 { font-size:22px; font-weight:600; letter-spacing:-.01em; }
+    .lede { color:var(--text-3); font-size:13px; margin-top:2px; }
+    .marker { color:var(--text-4); }
+
+    /* focus ring */
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+      outline:none; box-shadow:0 0 0 3px rgba(113,112,255,.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="mark">◉</span> Deal Hunter</div>
+    <nav class="topnav">
+      <a href="/" class="{{ 'active' if active=='index' }}">Dashboard</a>
+      <a href="/marketplace" class="{{ 'active' if active=='marketplace' }}">Marketplace</a>
+      <a href="/deals" class="{{ 'active' if active=='deals' }}">Deals</a>
+      <a href="/watch" class="{{ 'active' if active=='watch' }}">Watch</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="top-actions">
+      <span class="live-pill"><span class="live-dot"></span> LIVE</span>
+    </div>
+  </div>
+
+  <main class="shell">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

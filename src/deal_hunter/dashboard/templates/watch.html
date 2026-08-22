@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Watch · Deal Hunter{% endblock %}
+{% block content %}
+<div class="section-title"><span>Watch rules</span><span class="faint">create via Telegram: <span class="mono">/watch rtx 3060 under 15k</span></span></div>
+
+{% if watches %}
+<div class="stack" style="gap:8px">
+  {% for w in watches %}
+  <div class="watch-row">
+    <div style="flex:1;min-width:180px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="mono faint">#{{ w.id }}</span>
+        <span style="font-weight:500">{{ w.label or w.query }}</span>
+        {% if w.enabled %}<span class="chip chip-buy">ON</span>{% else %}<span class="chip chip-neutral">OFF</span>{% endif %}
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap">
+        <span>q: <span class="mono">{{ w.query }}</span></span>
+        {% if w.max_price %}<span>≤ <span class="mono">{{ fmt_inr(w.max_price) }}</span></span>{% endif %}
+        {% if w.locations %}<span>📍 {{ w.locations }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <div class="ic">☆</div>
+  <p>No watch rules yet.</p>
+  <p class="hint">Send <code class="mono">/watch rtx 3060 under 15k in delhi</code> to the Telegram bot to start getting instant alerts.</p>
+</div>
+{% endif %}
+
+<div class="section-title" style="margin-top:28px"><span>Recent hits</span></div>
+{% if hits %}
+<div class="table-wrap">
+  <table class="tbl">
+    <thead><tr><th>Rule</th><th>Listing</th><th>Matched</th><th>Alerted</th></tr></thead>
+    <tbody>
+    {% for h in hits %}
+      <tr>
+        <td class="mono-num">#{{ h.rule_id }}</td>
+        <td><a class="link mono" href="/deals">#{{ h.listing_id }}</a></td>
+        <td class="muted">{{ fmt_dt(h.score_at) }}</td>
+        <td>{% if h.alerted_at %}<span class="chip chip-buy">sent</span>{% else %}<span class="chip chip-neutral">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty" style="padding:28px"><p class="hint">No matches yet. New matching listings will appear here automatically.</p></div>
+{% endif %}
+
+<style>
+  .watch-row { background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-md); padding:14px 16px; display:flex; align-items:center; gap:14px; }
+  .watch-row:hover { background:var(--surface-2); }
+</style>
+{% endblock %}
