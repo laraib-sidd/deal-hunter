@@ -6,10 +6,9 @@ import asyncio
 import logging
 from datetime import datetime
 
-import httpx
-
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
+from deal_hunter.scrapers.http import HttpFetcher
 from deal_hunter.scrapers.parsing import extract_location, extract_price, strip_html
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,8 @@ MARKETPLACE_CATEGORIES = {
 }
 DEFAULT_CATEGORY_ID = 64  # Classifieds
 REQUEST_DELAY = 1.5  # seconds between requests (respect rate limits)
+REQUEST_TIMEOUT = 20.0  # per-request timeout (s)
+DEADLINE_SECONDS = 120.0  # hard cap for the whole scrape run (s)
 
 # Hardware-related tags on TechEnclave
 HARDWARE_TAGS = {"graphic-cards", "cpumobo", "storage-solutions", "pc-peripherals", "monitors"}
@@ -39,18 +40,12 @@ class TechEnclaveScraper(BaseScraper):
     async def scrape(self, keywords: list[str] | None = None, max_pages: int = 3) -> list[Listing]:
         """Fetch listings from TechEnclave classifieds.
 
-        If keywords are provided, uses Discourse search API.
-        Otherwise, paginates through the classifieds category.
+        Uses the shared HttpFetcher (timeout + retry/backoff + global deadline) so a slow
+        or hanging page cannot block the whole run indefinitely.
         """
-        netskope_ca = "/private/etc/netskope/netskope-cert-bundle.pem"
-        import os
-        verify: str | bool = netskope_ca if os.path.exists(netskope_ca) else True
-        async with httpx.AsyncClient(
-            timeout=30.0,
-            headers={"User-Agent": "DealHunter/0.1 (personal research tool)"},
-            follow_redirects=True,
-            verify=verify,
-        ) as client:
+        deadline = asyncio.get_event_loop().time() + DEADLINE_SECONDS
+
+        async with HttpFetcher(timeout=REQUEST_TIMEOUT) as client:
             if keywords:
                 topics = await self._search_topics(client, keywords, max_pages)
             else:
@@ -58,6 +53,9 @@ class TechEnclaveScraper(BaseScraper):
 
             listings = []
             for topic in topics:
+                if asyncio.get_event_loop().time() > deadline:
+                    logger.warning("TE scrape hit global deadline — stopping early")
+                    break
                 listing = await self._fetch_topic_detail(client, topic)
                 if listing:
                     listings.append(listing)
@@ -67,7 +65,7 @@ class TechEnclaveScraper(BaseScraper):
             return listings
 
     async def _fetch_category_topics(
-        self, client: httpx.AsyncClient, max_pages: int
+        self, client: HttpFetcher, max_pages: int
     ) -> list[dict]:
         """Paginate through marketplace categories."""
         topics: list[dict] = []
@@ -75,7 +73,10 @@ class TechEnclaveScraper(BaseScraper):
         for cat_id, cat_slug in MARKETPLACE_CATEGORIES.items():
             for page in range(max_pages):
                 url = f"{BASE_URL}/c/trading-post/{cat_slug}/{cat_id}.json"
-                resp = await client.get(url, params={"page": page})
+                resp = await client.get(url, params={"page": page}, host_min_interval=REQUEST_DELAY)
+                if resp is None:
+                    logger.warning("TE %s page %d failed after retries", cat_slug, page)
+                    break
                 if resp.status_code != 200:
                     logger.warning("TE %s page %d returned %d", cat_slug, page, resp.status_code)
                     break
@@ -89,12 +90,11 @@ class TechEnclaveScraper(BaseScraper):
                 topics.extend(page_topics)
 
                 logger.debug("TE %s page %d: %d topics", cat_slug, page, len(page_topics))
-                await asyncio.sleep(REQUEST_DELAY)
 
         return topics
 
     async def _search_topics(
-        self, client: httpx.AsyncClient, keywords: list[str], max_pages: int
+        self, client: HttpFetcher, keywords: list[str], max_pages: int
     ) -> list[dict]:
         """Search classifieds using Discourse search API."""
         topics: list[dict] = []
@@ -103,16 +103,15 @@ class TechEnclaveScraper(BaseScraper):
             resp = await client.get(
                 f"{BASE_URL}/search.json",
                 params={"q": query},
+                host_min_interval=REQUEST_DELAY,
             )
-            if resp.status_code != 200:
-                logger.warning("TE search for '%s' returned %d", keyword, resp.status_code)
+            if resp is None or resp.status_code != 200:
+                logger.warning("TE search for '%s' failed", keyword)
                 continue
 
             data = resp.json()
             for topic in data.get("topics", []):
                 topics.append(topic)
-
-            await asyncio.sleep(REQUEST_DELAY)
 
         # Deduplicate by topic ID
         seen_ids: set[int] = set()
@@ -124,11 +123,14 @@ class TechEnclaveScraper(BaseScraper):
         return unique[:max_pages * 30]  # reasonable cap
 
     async def _fetch_topic_detail(
-        self, client: httpx.AsyncClient, topic_summary: dict
+        self, client: HttpFetcher, topic_summary: dict
     ) -> Listing | None:
         """Fetch full topic and build a Listing."""
         topic_id = topic_summary["id"]
         resp = await client.get(f"{BASE_URL}/t/{topic_id}.json")
+        if resp is None:
+            logger.debug("TE topic %d failed", topic_id)
+            return None
         if resp.status_code != 200:
             logger.debug("TE topic %d returned %d", topic_id, resp.status_code)
             return None
