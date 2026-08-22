@@ -40,6 +40,15 @@ class AppConfig(BaseSettings):
     scrape_interval_seconds: int = 7200
     max_concurrent_requests: int = 5
 
+    # Scraper behaviour (12-Factor III: knobs live in config, not in scraper modules)
+    techenclave_request_delay: float = 1.5
+    techenclave_timeout: float = 20.0
+    techenclave_deadline_seconds: float = 120.0
+    reddit_limit: int = 200  # posts per subreddit batch
+    http_timeout: float = 15.0
+    http_max_retries: int = 3
+    netskope_ca_path: str = "/private/etc/netskope/netskope-cert-bundle.pem"
+
     # AI config — Groq free tier (Llama 4 Scout, 500K tokens/day, no credit card)
     ai_provider: str = "groq"
     ai_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"

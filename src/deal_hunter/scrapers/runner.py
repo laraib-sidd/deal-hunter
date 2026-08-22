@@ -19,15 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def _make_reddit(config: AppConfig) -> BaseScraper:
-    return RedditScraper(
-        client_id=config.reddit_client_id,
-        client_secret=config.reddit_client_secret,
-    )
+    return RedditScraper(config=config)
 
 
 # Registry: name -> factory(config). Add a source here; no `if` chain to touch.
 SOURCES: dict[str, Callable[[AppConfig], BaseScraper]] = {
-    "techenclave": lambda config: TechEnclaveScraper(),
+    "techenclave": lambda config: TechEnclaveScraper(config=config),
     "reddit": _make_reddit,
 }
 

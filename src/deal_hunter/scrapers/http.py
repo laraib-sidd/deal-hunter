@@ -22,9 +22,8 @@ DEFAULT_RETRIES = 3
 BASE_BACKOFF = 2.0  # seconds
 
 
-def _tls_context() -> ssl.SSLContext | bool:
-    """An SSL context trusting the corporate CA bundle if present (Netskope), else True."""
-    netskope_ca = "/private/etc/netskope/netskope-cert-bundle.pem"
+def _tls_context(netskope_ca: str = "/private/etc/netskope/netskope-cert-bundle.pem") -> ssl.SSLContext | bool:
+    """An SSL context trusting the corporate CA bundle if present, else True."""
     if os.path.exists(netskope_ca):
         ctx = ssl.create_default_context(cafile=netskope_ca)
         return ctx
@@ -46,6 +45,7 @@ class HttpFetcher:
         max_concurrent: int = 5,
         headers: dict[str, str] | None = None,
         follow_redirects: bool = True,
+        netskope_ca: str | None = None,
     ) -> None:
         self._timeout = timeout
         self._max_retries = max_retries
@@ -58,7 +58,7 @@ class HttpFetcher:
             timeout=timeout,
             headers=self._headers,
             follow_redirects=follow_redirects,
-            verify=_tls_context(),
+            verify=_tls_context(netskope_ca or "/private/etc/netskope/netskope-cert-bundle.pem"),
         )
 
     async def __aenter__(self) -> HttpFetcher:

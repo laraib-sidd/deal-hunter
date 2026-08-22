@@ -6,6 +6,7 @@ import asyncio
 import logging
 from datetime import datetime
 
+from deal_hunter.config import AppConfig
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
 from deal_hunter.scrapers.http import HttpFetcher
@@ -22,16 +23,19 @@ MARKETPLACE_CATEGORIES = {
     18: "looking-to-buy",   # WTB posts
 }
 DEFAULT_CATEGORY_ID = 64  # Classifieds
-REQUEST_DELAY = 1.5  # seconds between requests (respect rate limits)
-REQUEST_TIMEOUT = 20.0  # per-request timeout (s)
-DEADLINE_SECONDS = 120.0  # hard cap for the whole scrape run (s)
-
 # Hardware-related tags on TechEnclave
 HARDWARE_TAGS = {"graphic-cards", "cpumobo", "storage-solutions", "pc-peripherals", "monitors"}
 
 
 class TechEnclaveScraper(BaseScraper):
     """Scrapes TechEnclave Trading Post > Classifieds via Discourse JSON API."""
+
+    def __init__(self, config: AppConfig | None = None) -> None:
+        cfg = config or AppConfig()
+        self._request_delay = cfg.techenclave_request_delay
+        self._timeout = cfg.techenclave_timeout
+        self._deadline_seconds = cfg.techenclave_deadline_seconds
+        self._netskope_ca = cfg.netskope_ca_path
 
     @property
     def source_name(self) -> str:
@@ -43,9 +47,9 @@ class TechEnclaveScraper(BaseScraper):
         Uses the shared HttpFetcher (timeout + retry/backoff + global deadline) so a slow
         or hanging page cannot block the whole run indefinitely.
         """
-        deadline = asyncio.get_event_loop().time() + DEADLINE_SECONDS
+        deadline = asyncio.get_event_loop().time() + self._deadline_seconds
 
-        async with HttpFetcher(timeout=REQUEST_TIMEOUT) as client:
+        async with HttpFetcher(timeout=self._timeout, netskope_ca=self._netskope_ca) as client:
             if keywords:
                 topics = await self._search_topics(client, keywords, max_pages)
             else:
@@ -59,7 +63,7 @@ class TechEnclaveScraper(BaseScraper):
                 listing = await self._fetch_topic_detail(client, topic)
                 if listing:
                     listings.append(listing)
-                await asyncio.sleep(REQUEST_DELAY)
+                await asyncio.sleep(self._request_delay)
 
             self._log_results(len(listings))
             return listings
@@ -73,7 +77,7 @@ class TechEnclaveScraper(BaseScraper):
         for cat_id, cat_slug in MARKETPLACE_CATEGORIES.items():
             for page in range(max_pages):
                 url = f"{BASE_URL}/c/trading-post/{cat_slug}/{cat_id}.json"
-                resp = await client.get(url, params={"page": page}, host_min_interval=REQUEST_DELAY)
+                resp = await client.get(url, params={"page": page}, host_min_interval=self._request_delay)
                 if resp is None:
                     logger.warning("TE %s page %d failed after retries", cat_slug, page)
                     break
@@ -103,7 +107,7 @@ class TechEnclaveScraper(BaseScraper):
             resp = await client.get(
                 f"{BASE_URL}/search.json",
                 params={"q": query},
-                host_min_interval=REQUEST_DELAY,
+                host_min_interval=self._request_delay,
             )
             if resp is None or resp.status_code != 200:
                 logger.warning("TE search for '%s' failed", keyword)

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import praw
 
+from deal_hunter.config import AppConfig
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
 from deal_hunter.scrapers.parsing import extract_location, extract_price
@@ -28,8 +29,6 @@ DEFAULT_SUBREDDITS = [
 
 # Deal-focused subs where we skip the hardware requirement
 DEAL_SUBREDDITS = {"IndiaDealsExchange", "dealsforindia"}
-
-DEFAULT_LIMIT = 200  # posts per subreddit batch
 
 # Sale intent detection — broader to catch more listing styles
 _SALE_PATTERNS = re.compile(
@@ -83,10 +82,14 @@ class RedditScraper(BaseScraper):
         client_id: str = "",
         client_secret: str = "",
         subreddits: list[str] | None = None,
+        config: AppConfig | None = None,
     ) -> None:
-        self._client_id = client_id
-        self._client_secret = client_secret
+        cfg = config or AppConfig()
+        self._client_id = client_id or cfg.reddit_client_id
+        self._client_secret = client_secret or cfg.reddit_client_secret
         self._subreddits = subreddits or DEFAULT_SUBREDDITS
+        self._limit = cfg.reddit_limit
+        self._netskope_ca = cfg.netskope_ca_path
 
     @property
     def source_name(self) -> str:
@@ -105,7 +108,7 @@ class RedditScraper(BaseScraper):
         import os
 
         # Netskope TLS proxy — trust org CA bundle so PRAW/requests doesn't fail SSL
-        netskope_ca = "/private/etc/netskope/netskope-cert-bundle.pem"
+        netskope_ca = self._netskope_ca
         if os.path.exists(netskope_ca):
             os.environ.setdefault("REQUESTS_CA_BUNDLE", netskope_ca)
             os.environ.setdefault("SSL_CERT_FILE", netskope_ca)
@@ -130,7 +133,7 @@ class RedditScraper(BaseScraper):
         listings: list[Listing] = []
 
         # Hardware swap subs — scrape each individually at full depth
-        hw_limit = max_pages * DEFAULT_LIMIT
+        hw_limit = max_pages * self._limit
         for sub in hardware_subs:
             logger.info("Scanning r/%s (limit=%d)", sub, hw_limit)
             try:
@@ -145,7 +148,7 @@ class RedditScraper(BaseScraper):
 
         # Deal subs — combined feed, looser filter
         if deal_subs:
-            deal_limit = max_pages * DEFAULT_LIMIT
+            deal_limit = max_pages * self._limit
             multi = "+".join(deal_subs)
             logger.info("Scanning deal subs r/%s (limit=%d)", multi, deal_limit)
             try:
