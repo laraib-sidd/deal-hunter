@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -110,7 +110,7 @@ def _render_analysis(analysis: DealAnalysis) -> None:
 @app.command()
 def analyze(
     listing: Annotated[str, typer.Argument(help="Listing text, e.g. 'RTX 3060 Ti, 2yr old, ₹16,500'")],
-    price: Annotated[Optional[int], typer.Option("--price", "-p", help="Asking price in INR")] = None,
+    price: Annotated[int | None, typer.Option("--price", "-p", help="Asking price in INR")] = None,
     location: Annotated[str, typer.Option("--location", "-l", help="Seller location")] = "",
     description: Annotated[str, typer.Option("--desc", "-d", help="Additional description")] = "",
     ai: Annotated[bool, typer.Option("--ai", help="Use Groq AI for unknown products")] = True,
@@ -184,8 +184,8 @@ def search(
 
 @app.command()
 def scrape(
-    source: Annotated[Optional[str], typer.Option("--source", "-s", help="Scrape a single source")] = None,
-    keywords: Annotated[Optional[str], typer.Option("--keywords", "-k", help="Comma-separated search terms")] = None,
+    source: Annotated[str | None, typer.Option("--source", "-s", help="Scrape a single source")] = None,
+    keywords: Annotated[str | None, typer.Option("--keywords", "-k", help="Comma-separated search terms")] = None,
     max_pages: Annotated[int, typer.Option("--pages", help="Max pages per source")] = 3,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
@@ -230,8 +230,8 @@ def scrape(
 
 @app.command()
 def listings(
-    query: Annotated[Optional[str], typer.Argument(help="Search term (optional)")] = None,
-    source: Annotated[Optional[str], typer.Option("--source", "-s", help="Filter by source")] = None,
+    query: Annotated[str | None, typer.Argument(help="Search term (optional)")] = None,
+    source: Annotated[str | None, typer.Option("--source", "-s", help="Filter by source")] = None,
     limit: Annotated[int, typer.Option("--limit", "-n")] = 30,
     with_analysis: Annotated[bool, typer.Option("--analyze", "-a", help="Run deal analysis on each")] = False,
 ) -> None:

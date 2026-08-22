@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import praw
 
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
+from deal_hunter.scrapers.parsing import extract_location, extract_price
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,13 @@ DEFAULT_SUBREDDITS = [
     "techdeals",             # General tech deals
     "IndianTechDeals",       # India tech deals
     "GameDealsIndia",        # India game/hardware deals
+    "IndiaDealsExchange",    # India deals/coupons exchange
+    "dealsforindia",         # 120K+ members, verified India deals
 ]
+
+# Deal-focused subs where we skip the hardware requirement
+DEAL_SUBREDDITS = {"IndiaDealsExchange", "dealsforindia"}
+
 DEFAULT_LIMIT = 200  # posts per subreddit batch
 
 # Sale intent detection — broader to catch more listing styles
@@ -47,46 +54,13 @@ _HARDWARE_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# Price extraction
-_PRICE_PATTERNS = [
-    re.compile(r"(?:rs\.?|inr|₹)\s*([\d,]+)", re.IGNORECASE),
-    re.compile(r"([\d,]+)\s*(?:rs\.?|inr|₹)", re.IGNORECASE),
-    re.compile(r"(?:price|asking|expected)\s*[:=\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", re.IGNORECASE),
-]
-
-# "15k" / "25K" style prices common in Indian posts
-_K_PRICE_PATTERN = re.compile(r"\b(\d{1,3})k\b", re.IGNORECASE)
-
-_LOCATION_PATTERN = re.compile(
-    r"(?:location|city|loc|based\s+in|ship(?:ping)?\s+from)\s*[:=\-]\s*([A-Za-z][A-Za-z ]{2,25})",
+# Coupon/promo detection for deal-focused subreddits
+_COUPON_PATTERNS = re.compile(
+    r"\b(?:coupon|promo\s*code|discount|cashback|voucher|off|save|free|loot|"
+    r"flight|ticket|hotel|booking|travel|makemytrip|easemytrip|cleartrip|"
+    r"irctc|indigo|spicejet|airindia|goibibo|yatra|mmt)\b",
     re.IGNORECASE,
 )
-
-# Common Indian cities for direct mention detection in titles
-_INDIAN_CITIES = {
-    "mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "chennai",
-    "kolkata", "pune", "ahmedabad", "jaipur", "lucknow", "chandigarh",
-    "kochi", "indore", "nagpur", "coimbatore", "gurgaon", "noida",
-    "ghaziabad", "thane", "navi mumbai", "vadodara", "surat", "bhopal",
-    "patna", "vizag", "visakhapatnam", "mysore", "mangalore", "trivandrum",
-}
-
-
-def _extract_location(text: str) -> str | None:
-    """Extract location — try label pattern first, then city name scan."""
-    match = _LOCATION_PATTERN.search(text)
-    if match:
-        loc = match.group(1).strip().rstrip(".,;")
-        if len(loc) >= 3:
-            return loc[:50]
-
-    # Fallback: scan for known Indian city names
-    text_lower = text.lower()
-    for city in _INDIAN_CITIES:
-        if re.search(rf"\b{re.escape(city)}\b", text_lower):
-            return city.title()
-
-    return None
 
 
 def _is_hardware_sale_post(title: str, body: str) -> bool:
@@ -95,30 +69,10 @@ def _is_hardware_sale_post(title: str, body: str) -> bool:
     return bool(_SALE_PATTERNS.search(text) and _HARDWARE_PATTERNS.search(text))
 
 
-def _extract_price(text: str) -> float | None:
-    # Standard INR patterns first
-    for pattern in _PRICE_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            price_str = match.group(1).replace(",", "")
-            try:
-                price = float(price_str)
-                if 500 <= price <= 5_000_000:
-                    return price
-            except ValueError:
-                continue
-
-    # "15k" / "25K" style (multiply by 1000)
-    k_match = _K_PRICE_PATTERN.search(text)
-    if k_match:
-        try:
-            price = int(k_match.group(1)) * 1000
-            if 1000 <= price <= 500_000:
-                return float(price)
-        except ValueError:
-            pass
-
-    return None
+def _is_deal_post(title: str, body: str) -> bool:
+    """Check if a post is a deal/coupon/offer — for deal-focused subreddits."""
+    text = f"{title} {body}"
+    return bool(_COUPON_PATTERNS.search(text) or _SALE_PATTERNS.search(text))
 
 
 class RedditScraper(BaseScraper):
@@ -148,49 +102,83 @@ class RedditScraper(BaseScraper):
             return []
 
         import asyncio
+        import os
+
+        # Netskope TLS proxy — trust org CA bundle so PRAW/requests doesn't fail SSL
+        netskope_ca = "/private/etc/netskope/netskope-cert-bundle.pem"
+        if os.path.exists(netskope_ca):
+            os.environ.setdefault("REQUESTS_CA_BUNDLE", netskope_ca)
+            os.environ.setdefault("SSL_CERT_FILE", netskope_ca)
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._scrape_sync, keywords, max_pages)
 
     def _scrape_sync(self, keywords: list[str] | None, max_pages: int) -> list[Listing]:
-        """Synchronous scraping with PRAW."""
+        """Synchronous scraping with PRAW.
+
+        Scrapes hardware subs and deal subs separately so high-volume deal subs
+        don't crowd out the lower-volume hardware swap subs.
+        """
         reddit = praw.Reddit(
             client_id=self._client_id,
             client_secret=self._client_secret,
             user_agent="DealHunter/0.1 (personal hardware deal finder)",
         )
 
-        limit = max_pages * DEFAULT_LIMIT
-        multi = "+".join(self._subreddits)
+        hardware_subs = [s for s in self._subreddits if s not in DEAL_SUBREDDITS]
+        deal_subs = [s for s in self._subreddits if s in DEAL_SUBREDDITS]
         listings: list[Listing] = []
 
-        logger.info("Scanning r/%s (limit=%d)", multi, limit)
+        # Hardware swap subs — scrape each individually at full depth
+        hw_limit = max_pages * DEFAULT_LIMIT
+        for sub in hardware_subs:
+            logger.info("Scanning r/%s (limit=%d)", sub, hw_limit)
+            try:
+                for submission in reddit.subreddit(sub).new(limit=hw_limit):
+                    title = submission.title
+                    body = submission.selftext or ""
+                    if not _is_hardware_sale_post(title, body):
+                        continue
+                    listings.append(self._build_listing(submission))
+            except Exception as e:
+                logger.warning("r/%s failed: %s", sub, e)
 
-        for submission in reddit.subreddit(multi).new(limit=limit):
-            title = submission.title
-            body = submission.selftext or ""
-
-            if not _is_hardware_sale_post(title, body):
-                continue
-
-            full_text = f"{title} {body}"
-            price = _extract_price(full_text)
-            location = _extract_location(full_text)
-
-            posted_at = datetime.fromtimestamp(submission.created_utc, tz=timezone.utc)
-
-            listings.append(Listing(
-                source="reddit",
-                source_id=submission.id,
-                fingerprint=Listing.compute_fingerprint(title, price, location),
-                url=f"https://reddit.com{submission.permalink}",
-                title=title,
-                description=body[:2000] if body else None,
-                price=price,
-                location=location,
-                seller_name=str(submission.author) if submission.author else None,
-                posted_at=posted_at,
-            ))
+        # Deal subs — combined feed, looser filter
+        if deal_subs:
+            deal_limit = max_pages * DEFAULT_LIMIT
+            multi = "+".join(deal_subs)
+            logger.info("Scanning deal subs r/%s (limit=%d)", multi, deal_limit)
+            try:
+                for submission in reddit.subreddit(multi).new(limit=deal_limit):
+                    title = submission.title
+                    body = submission.selftext or ""
+                    if not _is_deal_post(title, body):
+                        continue
+                    listings.append(self._build_listing(submission))
+            except Exception as e:
+                logger.warning("Deal subs failed: %s", e)
 
         self._log_results(len(listings))
         return listings
+
+    def _build_listing(self, submission: object) -> Listing:
+        """Build a Listing from a PRAW submission."""
+        title = submission.title
+        body = submission.selftext or ""
+        full_text = f"{title} {body}"
+        price = extract_price(full_text)
+        location = extract_location(full_text)
+        posted_at = datetime.fromtimestamp(submission.created_utc, tz=UTC)
+        return Listing(
+            source="reddit",
+            source_id=submission.id,
+            fingerprint=Listing.compute_fingerprint(title, price, location),
+            url=f"https://reddit.com{submission.permalink}",
+            title=title,
+            description=body[:2000] if body else None,
+            price=price,
+            location=location,
+            seller_name=str(submission.author) if submission.author else None,
+            posted_at=posted_at,
+        )
+

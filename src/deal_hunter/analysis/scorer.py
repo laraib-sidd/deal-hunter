@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 
 from deal_hunter.analysis.normalizer import HardwareMatch, HardwareNormalizer
 from deal_hunter.analysis.pricing import (
@@ -13,31 +12,9 @@ from deal_hunter.analysis.pricing import (
 )
 from deal_hunter.analysis.red_flags import detect_red_flags
 from deal_hunter.analysis.schemas import DealAnalysis
+from deal_hunter.scrapers.parsing import extract_price
 
 logger = logging.getLogger(__name__)
-
-# Price extraction patterns for INR
-_PRICE_PATTERNS = [
-    re.compile(r"(?:rs\.?|inr|₹)\s*([\d,]+)", re.IGNORECASE),
-    re.compile(r"([\d,]+)\s*(?:rs\.?|inr|₹)", re.IGNORECASE),
-    re.compile(r"(?:price|asking|expected)\s*[:=\-]?\s*(?:rs\.?|inr|₹)?\s*([\d,]+)", re.IGNORECASE),
-]
-
-
-def extract_price(text: str) -> int | None:
-    """Extract the first INR price from text. Returns None if not found."""
-    for pattern in _PRICE_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            price_str = match.group(1).replace(",", "")
-            try:
-                price = int(price_str)
-                # Sanity: ignore numbers that are clearly not prices
-                if 500 <= price <= 5_000_000:
-                    return price
-            except ValueError:
-                continue
-    return None
 
 
 def _compute_deal_score(pct: float, flag_count: int, critical_flags: int) -> int:

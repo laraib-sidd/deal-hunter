@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from deal_hunter.scrapers.reddit import _extract_location, _extract_price, _is_hardware_sale_post
+from deal_hunter.scrapers.parsing import extract_location, extract_price
+from deal_hunter.scrapers.reddit import _is_hardware_sale_post
 
 
 class TestPostFiltering:
@@ -30,23 +31,23 @@ class TestPostFiltering:
 
 class TestPriceExtraction:
     def test_rs_in_title(self) -> None:
-        assert _extract_price("RTX 3060 Rs 15000 Mumbai") == 15000
+        assert extract_price("RTX 3060 Rs 15000 Mumbai") == 15000
 
     def test_rupee_symbol(self) -> None:
-        assert _extract_price("₹25,000 for the lot") == 25000
+        assert extract_price("₹25,000 for the lot") == 25000
 
     def test_no_price(self) -> None:
-        assert _extract_price("selling GPU PM for price") is None
+        assert extract_price("selling GPU PM for price") is None
 
 
 class TestLocationExtraction:
     def test_location_label(self) -> None:
-        assert _extract_location("Location: Hyderabad") == "Hyderabad"
+        assert extract_location("Location: Hyderabad") == "Hyderabad"
 
     def test_based_in(self) -> None:
-        loc = _extract_location("Based in Pune, can ship")
+        loc = extract_location("Based in Pune, can ship")
         assert loc is not None
         assert "Pune" in loc
 
     def test_no_location(self) -> None:
-        assert _extract_location("selling gpu cheap") is None
+        assert extract_location("selling gpu cheap") is None

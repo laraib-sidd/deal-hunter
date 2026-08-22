@@ -17,7 +17,8 @@ Description: "{description}"
 
 Return a JSON object with these fields:
 - canonical_name: full product name (e.g. "Crucial T700 4TB PCIe Gen5 NVMe SSD")
-- category: one of gpu, cpu, ram, ssd, monitor, motherboard, psu, laptop, headphone, keyboard, mouse, case, networking, storage, peripheral, other
+- category: one of gpu, cpu, ram, ssd, monitor, motherboard, psu, laptop,
+  headphone, keyboard, mouse, case, networking, storage, peripheral, other
 - brand: brand name
 - generation: tech generation or series (e.g. "PCIe Gen5", "Zen 4", "Wi-Fi 6E")
 - msrp_inr: estimated NEW retail price in India in INR (integer)

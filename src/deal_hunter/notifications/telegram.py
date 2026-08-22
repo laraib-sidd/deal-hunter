@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta, timezone
 import httpx
 
 from deal_hunter.analysis.schemas import DealAnalysis
+from deal_hunter.dashboard.present import VERDICT_BADGES, score_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +17,13 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _score_bar(score: int) -> str:
-    """Visual score bar using block characters."""
-    filled = "\u2588" * score          # █
-    empty = "\u2591" * (10 - score)    # ░
-    return f"{filled}{empty}"
+    """Visual score bar using block characters (shared glyphs)."""
+    return score_blocks(score)
 
 
 def _verdict_badge(verdict: str) -> str:
-    """Rich verdict label with emoji."""
-    badges = {
-        "BUY": "\U0001f7e2 BUY NOW",          # 🟢
-        "NEGOTIATE": "\U0001f7e1 NEGOTIATE",   # 🟡
-        "PASS": "\U0001f534 PASS",             # 🔴
-        "SCAM_RISK": "\u26d4 SCAM RISK",       # ⛔
-    }
-    return badges.get(verdict, verdict)
+    """Rich verdict label with emoji (shared data)."""
+    return VERDICT_BADGES.get(verdict, verdict)
 
 
 def _time_ago(posted_at: datetime | None) -> str:
@@ -153,7 +146,7 @@ def _format_summary_message(
     now = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
     lines = [
-        f"\U0001f4e1 <b>Deal Hunter Report</b>",
+        "\U0001f4e1 <b>Deal Hunter Report</b>",
         f"\U0001f4c5 {now}",
         f"{'─' * 28}",
         "",
