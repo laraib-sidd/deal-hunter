@@ -76,9 +76,13 @@ _CPU_PATTERNS: list[tuple[re.Pattern, str]] = [
 
 
 class HardwareNormalizer:
-    """Normalizes messy listing titles to canonical hardware names."""
+    """Normalizes messy listing titles to canonical hardware names.
 
-    def __init__(self, db_path: Path | None = None) -> None:
+    Aliases come from the bundled JSON by default; if an `engine` is provided, the
+    CatalogService's DB-backed alias map is merged in (M4: catalog scales via DB).
+    """
+
+    def __init__(self, db_path: Path | None = None, engine=None) -> None:
         path = db_path or (_DATA_DIR / "hardware_db.json")
         with open(path) as f:
             self._raw_db = json.load(f)
@@ -94,6 +98,29 @@ class HardwareNormalizer:
                 self._entries[hw_id] = {**entry, "category": category}
                 for alias in entry.get("aliases", []):
                     self._alias_map[alias.lower()] = hw_id
+
+        # Merge DB catalog aliases if an engine is available (M4).
+        if engine is not None:
+            try:
+                from deal_hunter.db.catalog import CatalogService
+
+                svc = CatalogService(engine)
+                for alias, (product_id, category, canonical_name, conf) in svc.alias_map().items():
+                    if alias not in self._alias_map:
+                        hw_id = f"db-{product_id}"
+                        self._entries.setdefault(hw_id, {
+                            "id": hw_id,
+                            "name": canonical_name,
+                            "category": category,
+                            "brand": "",
+                            "generation": "",
+                            "release_date": "",
+                            "msrp_inr": 0,
+                            "confidence": float(conf),
+                        })
+                        self._alias_map[alias] = hw_id
+            except Exception:  # pragma: no cover
+                logger.warning("Could not merge catalog aliases into normalizer", exc_info=True)
 
         self._alias_choices = list(self._alias_map.keys())
         logger.info("Loaded %d hardware entries, %d aliases", len(self._entries), len(self._alias_map))
