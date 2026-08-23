@@ -34,17 +34,32 @@ def detect_red_flags(
     description: str = "",
     location: str = "",
     mining_popular_ids: list[str] | None = None,
+    confidence: float = 1.0,
 ) -> list[RedFlag]:
-    """Run all rule-based red flag checks. Returns list of detected flags."""
+    """Run all rule-based red flag checks. Returns list of detected flags.
+
+    `confidence` is the confidence in the fair-value estimate (0..1). When it's low,
+    suspicious-pricing flags are downgraded so a data-sparse catalog doesn't over-fire
+    SCAM_RISK on legit listings (M5 fix).
+    """
     flags: list[RedFlag] = []
+    confident = confidence >= 0.5
 
     # 1. Suspicious pricing (too cheap)
-    if asking_price < fair.low * 0.65:
+    if asking_price < fair.low * 0.50 and confident:
         pct_below = round((1 - asking_price / fair.midpoint) * 100)
         flags.append(RedFlag(
             flag_type="suspicious_price",
             severity="critical",
             detail=f"Price is {pct_below}% below fair market — possible scam or defective unit",
+        ))
+    elif asking_price < fair.low * 0.65:
+        pct_below = round((1 - asking_price / fair.midpoint) * 100)
+        # Without strong confidence this is a strong 'below market' signal, not a scam.
+        flags.append(RedFlag(
+            flag_type="below_market",
+            severity="critical" if confident else "medium",
+            detail=f"Price is {pct_below}% below fair market — investigate condition carefully",
         ))
     elif asking_price < fair.low * 0.80:
         pct_below = round((1 - asking_price / fair.midpoint) * 100)

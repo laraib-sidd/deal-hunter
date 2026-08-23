@@ -84,6 +84,7 @@ def _build_analysis(
         description=full_text,
         location=location,
         mining_popular_ids=normalizer.mining_popular_ids,
+        confidence=hw.confidence,
     )
 
     critical_count = sum(1 for f in flags if f.severity == "critical")
