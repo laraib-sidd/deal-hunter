@@ -409,20 +409,64 @@ async def _send_deal_alerts(config, scored: list[tuple]) -> None:
     console.print(f"[green]Sent {send_count} Telegram alerts.[/]")
 
 
+async def _watch_loop(interval: int, min_score: int, notify: bool, config, scrapers, engine, normalizer) -> None:
+    """One watch cycle, factored out so the CLI command stays thin."""
+    import asyncio
+    import time
+
+    from deal_hunter.db.engine import upsert_listings
+    from deal_hunter.scrapers.runner import run_scrapers
+
+    while True:
+        console.print(f"[dim]{time.strftime('%H:%M:%S')}[/] Scraping...", end=" ")
+
+        listings = await run_scrapers(scrapers, max_pages=2)
+        inserted, _ = upsert_listings(engine, listings)
+        console.print(f"{len(listings)} fetched, {inserted} new.")
+
+        good_deals = []
+        for listing in listings:
+            if not listing.price:
+                continue
+            analysis = analyze_deal(
+                text=listing.title,
+                asking_price=int(listing.price),
+                location=listing.location or "",
+                description=listing.description or "",
+                normalizer=normalizer,
+            )
+            if analysis and analysis.deal_score >= min_score:
+                good_deals.append((listing, analysis))
+
+        if good_deals:
+            console.print(f"  [green]{len(good_deals)} deal(s) found![/]")
+            for listing, analysis in good_deals:
+                _render_analysis(analysis)
+            if notify and config.telegram.enabled:
+                from deal_hunter.cli import _send_deal_alerts
+
+                await _send_deal_alerts(config, good_deals)
+        else:
+            console.print(f"  No deals above {min_score}.")
+
+        console.print(f"  Next scrape in {interval}s...\n")
+        await asyncio.sleep(interval)
+
+
 @app.command()
 def watch(
     interval: Annotated[int, typer.Option("--interval", "-i", help="Seconds between scrape cycles")] = 300,
     min_score: Annotated[int, typer.Option("--min-score", "-m")] = 7,
-    ai: Annotated[bool, typer.Option("--ai", help="Use Claude Haiku for scoring")] = False,
+    ai: Annotated[bool, typer.Option("--ai", help="Use AI scoring")] = False,
     notify: Annotated[bool, typer.Option("--notify", help="Send Telegram alerts")] = False,
 ) -> None:
-    """Continuous mode: scrape, score, and alert on interval."""
+    """Continuous mode: scrape, score, and alert on interval (graceful shutdown)."""
     import asyncio
-    import time
+    import signal
 
     from deal_hunter.config import AppConfig
-    from deal_hunter.db.engine import get_engine, upsert_listings
-    from deal_hunter.scrapers.runner import build_scrapers, run_scrapers
+    from deal_hunter.db.engine import get_engine
+    from deal_hunter.scrapers.runner import build_scrapers
 
     config = AppConfig()
     scrapers = build_scrapers(config)
@@ -433,44 +477,26 @@ def watch(
     console.print(f"Sources: {', '.join(s.source_name for s in scrapers)}")
     console.print("Press Ctrl+C to stop.\n")
 
-    try:
-        while True:
-            console.print(f"[dim]{time.strftime('%H:%M:%S')}[/] Scraping...", end=" ")
+    async def _run() -> None:
+        stop = asyncio.Event()
 
-            listings = asyncio.run(run_scrapers(scrapers, max_pages=2))
-            inserted, _ = upsert_listings(engine, listings)
-            console.print(f"{len(listings)} fetched, {inserted} new.")
+        def _on_signal(signum, _frame) -> None:
+            console.print(f"\n[bold]Shutting down gracefully ({signal.Signals(signum).name})...[/]")
+            stop.set()
 
-            # Score new listings
-            good_deals = []
-            for listing in listings:
-                if not listing.price:
-                    continue
-                analysis = analyze_deal(
-                    text=listing.title,
-                    asking_price=int(listing.price),
-                    location=listing.location or "",
-                    description=listing.description or "",
-                    normalizer=normalizer,
-                )
-                if analysis and analysis.deal_score >= min_score:
-                    good_deals.append((listing, analysis))
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(signal.SIGINT, _on_signal, signal.SIGINT, None)
+        loop.add_signal_handler(signal.SIGTERM, _on_signal, signal.SIGTERM, None)
 
-            if good_deals:
-                console.print(f"  [green]{len(good_deals)} deal(s) found![/]")
-                for listing, analysis in good_deals:
-                    _render_analysis(analysis)
+        async with asyncio.TaskGroup() as tg:
+            task = tg.create_task(_watch_loop(interval, min_score, notify, config, scrapers, engine, normalizer))
+            await stop.wait()
+            task.cancel()
 
-                if notify and config.telegram.enabled:
-                    asyncio.run(_send_deal_alerts(config, good_deals))
-            else:
-                console.print(f"  No deals above {min_score}.")
+        engine.dispose()  # close the shared pool cleanly
+        console.print("[bold]Watch stopped cleanly.[/]")
 
-            console.print(f"  Next scrape in {interval}s...\n")
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        console.print("\n[bold]Watch stopped.[/]")
+    asyncio.run(_run())
 
 
 @app.command()
