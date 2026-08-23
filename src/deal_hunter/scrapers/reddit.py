@@ -61,15 +61,39 @@ _COUPON_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# High-volume trade/UPI spam that pollutes the marketplace but isn't real hardware for sale.
+# Matches explicit trade ratios ("95% upi", "100 upi", "500 upi") and gift-card trades,
+# but NOT a bare payment-method mention ("will pay via upi") in an otherwise-honest listing.
+_SPAM_PATTERNS = re.compile(
+    r"(?:\b\d{1,3}(?:%|\s)?\s*upi\b"          # "95% upi", "100 upi"
+    r"\b|\bg[i]?ft\s*card\b|\bpaytm\s*cash\b"
+    r"|amazon\s*(?:pay)?\s*gc\b|flipkart\s*gc\b"
+    r"|\b\w+\s*gc\b\s+\[w\]|\b\[w\]\s+.*?\bupi\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_spam_post(title: str, body: str) -> bool:
+    """True if the post is finance/trade/UPI spam, not a hardware listing."""
+    text = f"{title} {body}"
+    return bool(_SPAM_PATTERNS.search(text))
+
 
 def _is_hardware_sale_post(title: str, body: str) -> bool:
     """Check if a post is a hardware buy/sell listing."""
     text = f"{title} {body}"
+    if _is_spam_post(title, body):
+        return False
     return bool(_SALE_PATTERNS.search(text) and _HARDWARE_PATTERNS.search(text))
 
 
 def _is_deal_post(title: str, body: str) -> bool:
-    """Check if a post is a deal/coupon/offer — for deal-focused subreddits."""
+    """Check if a post is a deal/coupon/offer — for deal-focused subreddits.
+
+    Excludes finance/UPI trade spam even in deal subs.
+    """
+    if _is_spam_post(title, body):
+        return False
     text = f"{title} {body}"
     return bool(_COUPON_PATTERNS.search(text) or _SALE_PATTERNS.search(text))
 

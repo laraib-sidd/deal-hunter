@@ -24,7 +24,7 @@ class TestCatalog:
         e = get_engine(tmp_path / "c.db")
         svc = CatalogService(e)
         first = svc.seed_from_json()
-        second = svc.seed_from_json()
+        svc.seed_from_json()  # second run — should be idempotent
         with Session(e) as s:
             products = s.exec(select(Product)).all()
         assert first > 0
