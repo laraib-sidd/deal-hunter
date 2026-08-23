@@ -114,6 +114,17 @@ class WatchHit(SQLModel, table=True):
     alerted_at: datetime | None = Field(default=None, index=True)
 
 
+class AiCache(SQLModel, table=True):
+    """Cache of AI-normalize results keyed by listing fingerprint (no re-billing)."""
+
+    __tablename__ = "ai_cache"
+
+    id: int | None = Field(default=None, primary_key=True)
+    fingerprint: str = Field(index=True, unique=True)
+    result_json: str  # serialized HardwareMatch-equivalent
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 # ============================ Catalog (M4) ============================
 
 

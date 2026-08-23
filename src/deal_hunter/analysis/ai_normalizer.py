@@ -32,9 +32,33 @@ async def ai_normalize(
     description: str = "",
     api_key: str = "",
     model: str = "meta-llama/llama-4-scout-17b-16e-instruct",
+    fingerprint: str | None = None,
+    engine=None,
+    budget=None,
 ) -> HardwareMatch | None:
-    """Use Groq to identify unknown hardware. Returns HardwareMatch or None."""
+    """Use Groq to identify unknown hardware. Returns HardwareMatch or None.
+
+    If `fingerprint` + `engine` are given, checks the AI cache first (no re-billing)
+    and stores successful results. If `budget` (AiBudget) is given, skips the call once
+    the per-run cap is hit.
+    """
     if not api_key:
+        return None
+
+    # Cache hit -> free, no API call
+    if fingerprint and engine:
+        from deal_hunter.db.ai_cache_repo import cache_get
+
+        cached = cache_get(engine, fingerprint)
+        if cached is not None:
+            try:
+                return HardwareMatch(**json.loads(cached))
+            except (json.JSONDecodeError, TypeError, KeyError):
+                pass  # corrupt cache entry — fall through to a fresh call
+
+    # Guardrail: enforce per-run AI budget
+    if budget is not None and not budget.allow():
+        logger.warning("AI budget exhausted — skipping AI normalize for: %s", title[:40])
         return None
 
     try:
@@ -62,7 +86,7 @@ async def ai_normalize(
         if len(release) == 4:
             release = f"{release}-01"
 
-        return HardwareMatch(
+        match = HardwareMatch(
             hardware_id=f"ai-{result.get('category', 'other')}-{hash(title) & 0xFFFF:04x}",
             canonical_name=result.get("canonical_name") or title,
             category=result.get("category") or "other",
@@ -72,6 +96,14 @@ async def ai_normalize(
             release_date=str(release),
             confidence=0.75,
         )
+
+        # Cache the successful result to avoid re-billing
+        if fingerprint and engine:
+            from deal_hunter.db.ai_cache_repo import cache_put
+
+            cache_put(engine, fingerprint, match.model_dump_json())
+
+        return match
 
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.debug("AI normalize error: %s", exc)
