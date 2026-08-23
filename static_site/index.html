@@ -1,607 +1,71 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Deal Hunter</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    /* ============ DESIGN TOKENS (Linear-inspired calm dark) ============ */
-    :root {
-      --bg:          #0d0e0f;
-      --panel:       #141517;
-      --surface:     #18191b;
-      --surface-2:   #1e1f22;
-      --text-1:      #f7f8f8;
-      --text-2:      #b8bec8;
-      --text-3:      #8a8f98;
-      --text-4:      #5b5f66;
-      --accent:      #5e6ad2;
-      --accent-hi:   #7170ff;
-      --accent-hover:#828fff;
-      --deal-buy:     #27a644;
-      --deal-negotiate:#e8a33d;
-      --deal-pass:    #e05d5d;
-      --deal-scam:    #ff4949;
-      --border:       rgba(255,255,255,0.06);
-      --border-soft:  rgba(255,255,255,0.04);
-      --border-strong:rgba(255,255,255,0.09);
-      --r-xs: 2px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
-      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    }
-    * { box-sizing:border-box; margin:0; padding:0; }
-    html,body { height:100%; }
-    body {
-      font-family:var(--sans);
-      background:var(--bg);
-      color:var(--text-1);
-      font-size:14px;
-      line-height:1.5;
-      -webkit-font-smoothing:antialiased;
-      font-feature-settings:'cv01','ss03';
-    }
-    .mono { font-family:var(--mono); }
-
-    /* ---------- top bar ---------- */
-    .topbar {
-      position:sticky; top:0; z-index:50;
-      display:flex; align-items:center; gap:20px;
-      padding:0 24px; height:52px;
-      background:rgba(13,14,15,0.85);
-      backdrop-filter:blur(12px) saturate(160%);
-      border-bottom:1px solid var(--border-soft);
-    }
-    .brand { display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em; }
-    .brand .mark { width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,var(--accent-hi),var(--accent)); display:grid; place-items:center; font-size:12px; }
-    .topnav { display:flex; gap:2px; }
-    .topnav a {
-      color:var(--text-3); text-decoration:none; font-size:13px; font-weight:500;
-      padding:6px 11px; border-radius:var(--r-sm); transition:color .12s, background .12s;
-    }
-    .topnav a:hover { color:var(--text-1); }
-    .topnav a.active { color:var(--text-1); background:var(--surface-2); }
-    .topbar .spacer { flex:1; }
-    .top-actions { display:flex; align-items:center; gap:8px; }
-    .live-pill {
-      display:inline-flex; align-items:center; gap:7px;
-      font-size:12px; color:var(--text-3); padding:4px 10px;
-      border:1px solid var(--border); border-radius:9999px; background:var(--surface);
-    }
-    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--deal-buy); box-shadow:0 0 0 3px rgba(39,166,68,.18); }
-
-    /* ---------- layout ---------- */
-    .shell { max-width:1280px; margin:0 auto; padding:24px; }
-    .grid { display:grid; gap:16px; }
-    .grid-main { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
-    .stack { display:flex; flex-direction:column; gap:16px; }
-    @media(max-width:960px){ .grid-main{grid-template-columns:1fr} .topbar{padding:0 14px} .shell{padding:16px} }
-
-    /* ---------- stat cards ---------- */
-    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
-    .card {
-      background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-md);
-      padding:16px; position:relative; overflow:hidden;
-    }
-    .card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-4); font-weight:500; }
-    .card .num { font-family:var(--mono); font-size:26px; font-weight:500; color:var(--text-1); margin-top:6px; letter-spacing:-.02em; }
-    .card .delta-line { margin-top:8px; font-size:12px; }
-    .card.accent-border { border-top:2px solid var(--accent-hi); }
-
-    /* ---------- section ---------- */
-    .section-title {
-      display:flex; align-items:baseline; justify-content:space-between;
-      margin:0 0 12px; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-4); font-weight:600;
-    }
-
-    /* ---------- table ---------- */
-    .table-wrap { border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; background:var(--surface); }
-    table.tbl { width:100%; border-collapse:collapse; }
-    .tbl th {
-      text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
-      color:var(--text-4); font-weight:500; padding:9px 14px; background:var(--surface);
-      border-bottom:1px solid var(--border); white-space:nowrap;
-    }
-    .tbl td { padding:10px 14px; border-bottom:1px solid var(--border-soft); vertical-align:middle; font-size:13px; }
-    .tbl tbody tr:last-child td { border-bottom:none; }
-    .tbl tbody tr:hover { background:var(--surface-2); }
-    .tbl .mono-num { font-family:var(--mono); font-size:13px; white-space:nowrap; }
-
-    /* ---------- chips ---------- */
-    .chip { display:inline-block; padding:2px 8px; border-radius:var(--r-xs); font-size:11px; font-weight:500; letter-spacing:.03em; white-space:nowrap; }
-    .chip-buy { background:rgba(39,166,68,.14); color:#4ade80; }
-    .chip-negotiate { background:rgba(232,163,61,.14); color:#f5c56b; }
-    .chip-pass { background:rgba(224,93,93,.14); color:#f18484; }
-    .chip-scam { background:rgba(255,73,73,.16); color:#ff8080; }
-    .chip-neutral { background:var(--surface-2); color:var(--text-3); }
-
-    /* ---------- price delta ---------- */
-    .delta { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:500; font-family:var(--mono); }
-    .delta-good { color:#4ade80; }
-    .delta-bad { color:#ff8080; }
-    .delta-flat { color:var(--text-3); }
-
-    /* ---------- score/signal ---------- */
-    .sig-buy { color:#4ade80; }
-    .sig-negotiate { color:#f8c56b; }
-    .sig-pass { color:#ff8080; }
-    .sig-scam { color:#ff4949; }
-    .muted { color:var(--text-3); }
-    .faint { color:var(--text-4); }
-
-    /* ---------- source pill ---------- */
-    .source-pill {
-      display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
-      padding:3px 10px; border:1px solid var(--border); border-radius:9999px; background:transparent;
-    }
-    .source-pill .dot { width:6px; height:6px; border-radius:50%; background:var(--text-4); }
-    .source-pill.running .dot { background:var(--deal-buy); }
-
-    /* ---------- buttons ---------- */
-    .btn {
-      display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
-      padding:7px 12px; border-radius:var(--r-sm); border:1px solid var(--border);
-      background:rgba(255,255,255,0.02); color:var(--text-1); cursor:pointer; text-decoration:none;
-      transition:background .12s, border-color .12s, color .12s;
-    }
-    .btn:hover { background:rgba(255,255,255,0.05); border-color:var(--border-strong); }
-    .btn-primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-    .btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
-    .btn-sm { padding:4px 9px; font-size:12px; }
-    .btn-icon { padding:5px 9px; }
-
-    /* ---------- inputs / filter bar ---------- */
-    .filterbar {
-      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
-      padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:16px;
-    }
-    .search-input {
-      flex:1; min-width:200px; font-family:var(--sans); font-size:13px; color:var(--text-1);
-      background:transparent; border:none; padding:6px 4px; outline:none;
-    }
-    .search-input::placeholder{color:var(--text-4);}
-    select, .select {
-      font-family:var(--sans); font-size:12px; color:var(--text-2);
-      background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 10px;
-    }
-    select:focus { outline:1px solid var(--accent-hi); }
-
-    /* ---------- link ---------- */
-    a.link { color:var(--text-1); text-decoration:none; }
-    a.link:hover { color:var(--accent-hover); }
-    a.action { color:var(--accent-hi); text-decoration:none; font-size:12px; font-weight:500; }
-    a.action:hover { color:var(--accent-hover); }
-
-    /* ---------- empty state ---------- */
-    .empty { text-align:center; padding:48px 20px; color:var(--text-3); }
-    .empty .ic { font-size:30px; opacity:.6; margin-bottom:10px; }
-    .empty p { font-size:14px; }
-    .empty .hint { font-size:12px; color:var(--text-4); margin-top:6px; }
-
-    /* ---------- banner ---------- */
-    .banner {
-      display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--r-md);
-      font-size:13px; margin-bottom:16px; border:1px solid;
-    }
-    .banner.warn { background:rgba(232,163,61,.08); border-color:rgba(232,163,61,.25); color:#f8c56b; }
-    .banner.info { background:rgba(94,106,210,.08); border-color:rgba(94,106,210,.25); color:#a5adff; }
-
-    /* ---------- market pulse bar ---------- */
-    .barwrap { background:var(--surface-2); border-radius:4px; overflow:hidden; height:6px; }
-    .bar { height:100%; background:var(--accent); border-radius:4px; }
-
-    /* ---------- product / sparkline ---------- */
-    .h1 { font-size:22px; font-weight:600; letter-spacing:-.01em; }
-    .lede { color:var(--text-3); font-size:13px; margin-top:2px; }
-    .marker { color:var(--text-4); }
-
-    /* focus ring */
-    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
-      outline:none; box-shadow:0 0 0 3px rgba(113,112,255,.35);
-    }
-  </style>
-</head>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Hunter — Used Hardware Deals India (Snapshot)</title>
+<style>
+:root{--bg:#0d0e0f;--panel:#18191b;--border:rgba(255,255,255,.07);--t1:#f7f8f8;--t2:#b8bec8;--t3:#8a8f98;--t4:#5b5f66;--acc:#7170ff;--good:#34c759;--warn:#ff9f0a;--bad:#ff453a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--t1);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto;padding:24px}
+.topbar{position:sticky;top:0;z-index:9;background:rgba(13,14,15,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:12px 24px}
+.topbar .brand{font-weight:700;font-size:15px;color:var(--acc)}
+.live{display:inline-flex;align-items:center;gap:7px;margin-left:auto;font-size:12px;color:var(--t3);border:1px solid var(--border);border-radius:999px;padding:4px 10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px rgba(52,199,89,.18)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t4)}
+.card .num{font-size:26px;font-weight:700;margin-top:4px;font-family:ui-monospace,Menlo,monospace}
+.sec{margin:26px 0}
+.sec h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--t4);margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.pcard{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;text-decoration:none;color:var(--t1);display:flex;flex-direction:column;gap:8px;transition:transform .12s,border-color .12s}
+.pcard:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.2)}
+.pcard .cat{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t4)}
+.pcard .title{font-size:14px;font-weight:500;line-height:1.4;min-height:40px;color:var(--t1)}
+.pcard .price{font-size:19px;font-weight:700;font-family:ui-monospace,Menlo,monospace;color:var(--t1)}
+.pcard .meta{font-size:12px;color:var(--t3);display:flex;justify-content:space-between;gap:8px}
+.chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;width:max-content}
+.v-buy{background:rgba(52,199,89,.16);color:#4ade80}
+.v-neg{background:rgba(255,159,10,.16);color:#ffc060}
+.v-pass{background:rgba(255,69,58,.16);color:#ff8a7a}
+.v-scam{background:rgba(255,69,58,.24);color:#ffb3ab}
+.chip.none{background:var(--panel);color:var(--t3);border:1px solid var(--border)}
+.muted{color:var(--t3)}.faint{color:var(--t4)}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--t4);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+td a{color:var(--t1);text-decoration:none}td a:hover{color:var(--acc)}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600}
+.badge.src{background:var(--panel);color:var(--t3);border:1px solid var(--border)}
+.alt{color:var(--t3);font-size:12px}
+.foot{color:var(--t4);font-size:11px;text-align:center;margin-top:30px;padding:16px}
+</style></head>
 <body>
-  <div class="topbar">
-    <div class="brand"><span class="mark">◉</span> Deal Hunter</div>
-    <nav class="topnav">
-      <a href="/" class="">Dashboard</a>
-      <a href="/marketplace" class="">Marketplace</a>
-      <a href="/deals" class="">Deals</a>
-      <a href="/watch" class="">Watch</a>
-    </nav>
-    <div class="spacer"></div>
-    <div class="top-actions">
-      <span class="live-pill"><span class="live-dot"></span> LIVE</span>
-    </div>
+<div class="topbar">
+  <span class="brand">◉ Deal Hunter</span>
+  <span class="muted">Used hardware deals · India</span>
+  <span class="live"><span class="dot"></span> Live snapshot · 23 Aug 2026, 17:00</span>
+</div>
+<div class="wrap">
+
+  <div class="cards">
+    <div class="card"><div class="lbl">Tracked listings</div><div class="num">4146</div></div>
+    <div class="card"><div class="lbl">Priced</div><div class="num">1418</div></div>
+    <div class="card"><div class="lbl">In this view</div><div class="num">200</div></div>
+    <div class="card"><div class="lbl">Sources</div><div class="num">2</div></div>
   </div>
 
-  <main class="shell">
-    
-<!-- Hero stat cards -->
-<div class="cards">
-  <div class="card"><div class="lbl">New / 24h</div><div class="num">290</div><div class="delta-line"><span class="delta delta-good">↓ live scan</span></div></div>
-  <div class="card"><div class="lbl">Active listings</div><div class="num">4146</div><div class="delta-line"><span class="faint">tracked</span></div></div>
-  <div class="card accent-border"><div class="lbl">Deals <span class="faint">score≥6</span></div><div class="num sig-buy">1</div><div class="delta-line"><span class="delta delta-good">▲ buy signals</span></div></div>
-  <div class="card"><div class="lbl">Sellers</div><div class="num">0</div><div class="delta-line"><span class="faint">tracked</span></div></div>
-  <div class="card"><div class="lbl">Active watches</div><div class="num">0</div><div class="delta-line"><span class="faint">0 hits</span></div></div>
-</div>
+  <div class="sec"><h2>⭐ Flagged deals (auto-scored)</h2><div class="grid"><a class="pcard" href="https://techenclave.com/t/matched-pair-24gb-2x12gb-ramaxel-ddr5-4800mhz-so-dimm-laptop-ram/424420" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 4060</div><div class="price">₹14,000</div><div class="meta"><span>Kottayam, Kerala</span><span class="faint">82d ago</span></div><div><span class="chip v-neg">NEGOTIATE</span> · 6.0/10</div></a><a class="pcard" href="https://techenclave.com/t/msi-pro-b650-a-wifi-motherboard-14-phase-vrm/421277" target="_blank" rel="noopener"><div class="cat">Cpu · <span class="badge src">techenclave</span></div><div class="title">AMD Ryzen 5 7600X</div><div class="price">₹17,400</div><div class="meta"><span>—</span><span class="faint">81d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a><a class="pcard" href="https://reddit.com/r/IndianGaming/comments/1ttg3sn/sale_loq_i5_12450h406016gb512gb_ssd/" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">reddit</span></div><div class="title">NVIDIA GeForce RTX 4060</div><div class="price">₹65,000</div><div class="meta"><span>New Delhi</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a><a class="pcard" href="https://techenclave.com/t/gigabyte-4070-ti-super-16gb-vram-oc-edition/427629" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 4070 Ti Super</div><div class="price">₹70,999</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a><a class="pcard" href="https://reddit.com/r/IndianGaming/comments/1ttkgqi/building_my_first_gaming_pc_need_help_on_a_few/" target="_blank" rel="noopener"><div class="cat">Cpu · <span class="badge src">reddit</span></div><div class="title">AMD Ryzen 7 7800X3D</div><div class="price">₹4,000</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 1.0/10</div></a><a class="pcard" href="https://techenclave.com/t/fs-zotac-geforce-rtx-2070-8gb-meticulously-maintained/427296" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 3060</div><div class="price">₹13,000</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 1.0/10</div></a></div></div>
 
+  <div class="sec"><h2>Gpu <span class="faint">· 4</span></h2><div class="grid"><a class="pcard" href="https://techenclave.com/t/matched-pair-24gb-2x12gb-ramaxel-ddr5-4800mhz-so-dimm-laptop-ram/424420" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 4060</div><div class="price">₹14,000</div><div class="meta"><span>Kottayam, Kerala</span><span class="faint">82d ago</span></div><div><span class="chip v-neg">NEGOTIATE</span> · 6.0/10</div></a><a class="pcard" href="https://techenclave.com/t/fs-zotac-geforce-rtx-2070-8gb-meticulously-maintained/427296" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 3060</div><div class="price">₹13,000</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 1.0/10</div></a><a class="pcard" href="https://techenclave.com/t/gigabyte-4070-ti-super-16gb-vram-oc-edition/427629" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">techenclave</span></div><div class="title">NVIDIA GeForce RTX 4070 Ti Super</div><div class="price">₹70,999</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a><a class="pcard" href="https://reddit.com/r/IndianGaming/comments/1ttg3sn/sale_loq_i5_12450h406016gb512gb_ssd/" target="_blank" rel="noopener"><div class="cat">Gpu · <span class="badge src">reddit</span></div><div class="title">NVIDIA GeForce RTX 4060</div><div class="price">₹65,000</div><div class="meta"><span>New Delhi</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a></div></div><div class="sec"><h2>Cpu <span class="faint">· 2</span></h2><div class="grid"><a class="pcard" href="https://techenclave.com/t/msi-pro-b650-a-wifi-motherboard-14-phase-vrm/421277" target="_blank" rel="noopener"><div class="cat">Cpu · <span class="badge src">techenclave</span></div><div class="title">AMD Ryzen 5 7600X</div><div class="price">₹17,400</div><div class="meta"><span>—</span><span class="faint">81d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 2.0/10</div></a><a class="pcard" href="https://reddit.com/r/IndianGaming/comments/1ttkgqi/building_my_first_gaming_pc_need_help_on_a_few/" target="_blank" rel="noopener"><div class="cat">Cpu · <span class="badge src">reddit</span></div><div class="title">AMD Ryzen 7 7800X3D</div><div class="price">₹4,000</div><div class="meta"><span>—</span><span class="faint">82d ago</span></div><div><span class="chip v-scam">SCAM RISK</span> · 1.0/10</div></a></div></div><div class="sec"><h2>Other <span class="faint">· 194</span></h2><div class="grid"><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzqd6/h_subscription_vochers_w_upiamzpay_20_to_40/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[h] subscription &amp; vochers [w] upi/amzpay 20 to 40</div><div class="price">₹1,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv16ul/h_fitpass_pro_12_months_from_bob_w_upi55k/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Fitpass Pro 12 Months From BOB [W] UPI/5.5K</div><div class="price">₹5,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2d7l/h_prime_video_4k_premium_1_year_w_200slot/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Prime Video 4K Premium - 1 Year [W] 200/slot</div><div class="price">₹4,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv3d6t/hkalyan_gift_voucher_worth_2k_w_16k_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H]Kalyan Gift voucher worth 2k [W] 1.6k UPI</div><div class="price">₹2,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv3ptn/h_upi_95_w_electricity_bill_payment_32k/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] UPI 95% [W] Electricity Bill payment 32k</div><div class="price">₹32,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv41ta/h_1200_upi_w_jh_premium_1_year_4k/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 1200 UPI [W] JH premium 1 year 4k</div><div class="price">₹4,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv4ztj/h_jh_premium_1_yr_1_month_w_500_rs_60_rs/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] JH Premium 1 yr/ 1 month [W] 500 rs / 60 rs</div><div class="price">₹500</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv55ib/h_taj_voucher_10000_w_8500_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Taj Voucher ₹10000 [W] ₹8500 UPI</div><div class="price">₹10,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv5h9a/h_easymytrip_800_off_on_round_trip_flights_w_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Easymytrip 800₹ off on round trip Flights [W] UPI 100</div><div class="price">₹800</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7cez/h_95_w_electricity_bill_payment/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 95% [W] Electricity Bill payment</div><div class="price">₹4,050</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7ewu/h_5k_upi_w_10k_taj_voucher/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 5K upi [w] 10k taj voucher</div><div class="price">₹5,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7je2/h_amazon_prime_lakme_salon_kalyan_jewellers_w_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Amazon Prime, Lakme Salon, Kalyan Jewellers [W] UPI</div><div class="price">₹2,500</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8kw4/h_cultfit_elite_1_month_w_rs_950/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Cultfit Elite 1 month [W] Rs. 950</div><div class="price">₹950</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8t3p/h_upi_95_w_apay_4k_worth/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] UPI 95% [W] APAY 4k worth</div><div class="price">₹4,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv90az/h_15k_flat_discount_on_any_flight_booking_w_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 1.5k flat discount on any flight booking [W] UPI after discount</div><div class="price">₹5,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv9c0e/h_shein_800_off_on_1k_cart_coupon_w_120_rs_upi/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] shein 800 off on 1k cart coupon [W] 120 rs upi</div><div class="price">₹1,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv9ct2/h_6000_w_10k_taj_vocher/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 6000 [W] 10K taj vocher</div><div class="price">₹10,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vva70u/h_3000_bookmyshow_tickets_w_fitpass_cult_fit/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] ₹3000 BookMyShow Tickets [W] Fitpass, Cult Fit, Anytime Fitness</div><div class="price">₹3,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8pcx/hbhima_voucher_44500w_42500/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H]Bhima Voucher 44500/[W] 42500</div><div class="price">₹44,500</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/dealsforindia/comments/1vvbw6o/myfitnesspal_premium_1_year_for_1500/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">MyFitnessPal Premium 1 year for ₹1,500</div><div class="price">₹1,500</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vvba4j/h_porter_packer_and_mover_voucher_6k_w_upi_5k/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Porter Packer and Mover voucher 6k [W] UPI 5k</div><div class="price">₹6,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vvfiri/h_1450_upi_w_2k_kalyan_gc/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 1450 UPI [W] 2K Kalyan GC</div><div class="price">₹2,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vve4q9/h_06ppoint_upi_w_air_india_maharaja_points/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] 0.6p/point - UPI [W] Air India Maharaja Points</div><div class="price">₹20,000</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a><a class="pcard" href="https://reddit.com/r/IndiaDealsExchange/comments/1vvg11m/h_apay_650_rs_pulse_labs_w_upi_620/" target="_blank" rel="noopener"><div class="cat">Other · <span class="badge src">reddit</span></div><div class="title">[H] Apay 650 rs ( pulse labs ) [W] Upi 620</div><div class="price">₹650</div><div class="meta"><span>—</span><span class="faint">1d ago</span></div><div><span class="chip none">—</span></div></a></div></div>
 
+  <div class="sec"><h2>By source</h2><div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>reddit</span><span class="muted">3792</span></div><div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>techenclave</span><span class="muted">354</span></div></div>
 
-<div class="grid grid-main" style="margin-top:20px">
-  <!-- Latest listings -->
-  <section class="stack">
-    <div class="section-title"><span>Latest listings</span></div>
-    <div class="table-wrap">
-      <table class="tbl">
-        <thead><tr><th>Listing</th><th>Price</th><th>Source</th><th>Verdict</th><th>Score</th></tr></thead>
-        <tbody>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzqd6/h_subscription_vochers_w_upiamzpay_20_to_40/" target="_blank" rel="noopener">[h] subscription &amp; vochers [w] upi/amzpay 20 to 40</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹1,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzy10/h_150_w_blr_t1_lounge_access/" target="_blank" rel="noopener">[H] 150 [W] BLR T1 Lounge Access</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv04av/h_95_upi_w_50k_fk/" target="_blank" rel="noopener">[H] 95% upi [w] 50k fk</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹50,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/dealsforindia/comments/1vv05nw/mens_jeans_at_87_off/" target="_blank" rel="noopener">Men&#39;s Jeans at 87% off</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv06rx/h_upi_w_bookmyshow_or_pvr_offer_for_3_tickets/" target="_blank" rel="noopener">[H] Upi, [W] BookMyShow or PVR offer for 3 tickets</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv08wn/h_45_upi_each_w_mmt_rail_100rs_gc_need_2/" target="_blank" rel="noopener">[H] 45 UPI each [W] MMT rail 100rs gc need 2</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv0vqw/h_97upi_w_amazon_pay_gc_worth_around_rs450/" target="_blank" rel="noopener">[H] 97%upi [W] Amazon pay gc worth around rs.450</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv16ul/h_fitpass_pro_12_months_from_bob_w_upi55k/" target="_blank" rel="noopener">[H] Fitpass Pro 12 Months From BOB [W] UPI/5.5K</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹5,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv188f/h_100_upiw_sbi_wealth_rupay_select_debit_card/" target="_blank" rel="noopener">[H] 100 UPI[W] SBI Wealth RuPay Select Debit Card Bo</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹500</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1bfr/htata_cliq_fashion_rs2000_gift_card_w_80_upi/" target="_blank" rel="noopener">[H]Tata Cliq Fashion rs2000 gift card [W] 80% upi</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹2,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1byv/h_decathlon_rs_500_voucher_w_400_upi/" target="_blank" rel="noopener">[H] Decathlon rs 500 voucher [W] 400 upi</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹500</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1ddu/h_85_upi_w_uber_gc/" target="_blank" rel="noopener">[H] 85% UPI [W] Uber GC</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1dmz/h_125_upi_w_thyrocare/" target="_blank" rel="noopener">[H] 125 UPI [W] Thyrocare</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1jqb/h_90_upi_w_airtel_wifi_bill_payment_of_470/" target="_blank" rel="noopener">[H] 90% UPI [W] Airtel Wi-Fi Bill Payment of ₹470</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1nyr/h_80_upi_w_apple_store_gv/" target="_blank" rel="noopener">[H] 80 % UPI [W] Apple Store GV</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1pfv/h_upi_3001000_w_linkedin_premium/" target="_blank" rel="noopener">[H] UPI 300-1000 [W] LinkedIn Premium</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1qsc/h_94_upi_w_amazon_shopping_voucher_of_1500/" target="_blank" rel="noopener">[H] 94% UPI [W] Amazon Shopping Voucher of 1500</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1ucz/h_93_percent_upi_w_utility_bill_payment_on_paytm/" target="_blank" rel="noopener">[H] 93 percent upi [W] utility bill payment on paytm</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv213z/h_roblox_giftcard_840_w_790_upi_amazon_gc/" target="_blank" rel="noopener">[H] Roblox Giftcard 840 [W] ₹790 UPI , Amazon GC</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹790</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv22ri/h_80_percent_upi_w_4_k_district_dining/" target="_blank" rel="noopener">[H] 80 percent UPI [W] 4 k District dining</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv238v/h_dominos_1000_gv_available_w_900_upi_exchange/" target="_blank" rel="noopener">[H] Dominos 1000 GV available [W] 900 UPI, exchange </a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹1,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv252j/h_mmt_rail_100_giftcard_w_50/" target="_blank" rel="noopener">[H] MMT Rail ₹100 Giftcard [W] ₹50</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv29n2/h_mmt_bus_gc_w_upi/" target="_blank" rel="noopener">[H] MMT Bus GC [W] UPI</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num"><span class="faint">—</span></td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2c1b/h_rupay_dc_benefits_w_upi/" target="_blank" rel="noopener">[H] Rupay DC Benefits [W] UPI</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹2,950</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-          <tr>
-            <td>
-              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2d7l/h_prime_video_4k_premium_1_year_w_200slot/" target="_blank" rel="noopener">[H] Prime Video 4K Premium - 1 Year [W] 200/slot</a>
-              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
-            </td>
-            <td class="mono-num">₹4,000</td>
-            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
-            <td><span class="chip chip-neutral">—</span></td>
-            <td class="mono-num"></td>
-          </tr>
-        
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- Right rail -->
-  <div class="stack">
-    <section class="stack">
-      <div class="section-title"><span>Market pulse</span></div>
-      <div class="stack" style="gap:8px">
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 4060" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 4060</span><span class="faint mono">3 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/AMD Ryzen 7 7800X3D" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">AMD Ryzen 7 7800X3D</span><span class="faint mono">3 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/AMD Ryzen 5 7600X" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">AMD Ryzen 5 7600X</span><span class="faint mono">3 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 3080" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 3080</span><span class="faint mono">2 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:66.66666666666666%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 3060" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 3060</span><span class="faint mono">2 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:66.66666666666666%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 4090" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 4090</span><span class="faint mono">1 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 4080" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 4080</span><span class="faint mono">1 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
-        </a>
-      
-        <a class="link" href="/product/NVIDIA GeForce RTX 4070 Ti Super" style="display:block">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-            <span class="muted">NVIDIA GeForce RTX 4070 Ti Super</span><span class="faint mono">1 listings</span>
-          </div>
-          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
-        </a>
-      
-      
-      </div>
-    </section>
-
-    <section class="stack">
-      <div class="section-title"><span>By source</span></div>
-      
-      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
-        <span class="source-pill running"><span class="dot"></span>reddit</span>
-        <span class="muted" style="margin-left:auto">3792</span>
-      </div>
-      
-      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
-        <span class="source-pill running"><span class="dot"></span>techenclave</span>
-        <span class="muted" style="margin-left:auto">354</span>
-      </div>
-      
-    </section>
+  <div class="sec"><h2>Recent listings</h2>
+    <table><thead><tr><th>Listing</th><th>Price</th><th>Source</th><th>Verdict</th><th>Age</th></tr></thead>
+    <tbody><tr><td><a href="https://techenclave.com/t/msi-pro-b650-a-wifi-motherboard-14-phase-vrm/421277" target="_blank">MSI Pro B650-A wifi motherboard 14 phase VRM</a></td><td>₹17,400</td><td><span class='badge src'>techenclave</span></td><td><span class='chip v-scam'>SCAM RISK</span></td><td class='faint'>81d ago</td></tr><tr><td><a href="https://techenclave.com/t/matched-pair-24gb-2x12gb-ramaxel-ddr5-4800mhz-so-dimm-laptop-ram/424420" target="_blank">Matched Pair: 24GB (2x12GB) RAMAXEL DDR5-4800MHz SO-DIMM Laptop RAM</a></td><td>₹14,000</td><td><span class='badge src'>techenclave</span></td><td><span class='chip v-neg'>NEGOTIATE</span></td><td class='faint'>82d ago</td></tr><tr><td><a href="https://techenclave.com/t/fs-zotac-geforce-rtx-2070-8gb-meticulously-maintained/427296" target="_blank">[FS] Zotac GeForce RTX 2070 8GB – Meticulously Maintained</a></td><td>₹13,000</td><td><span class='badge src'>techenclave</span></td><td><span class='chip v-scam'>SCAM RISK</span></td><td class='faint'>82d ago</td></tr><tr><td><a href="https://techenclave.com/t/gigabyte-4070-ti-super-16gb-vram-oc-edition/427629" target="_blank">Gigabyte 4070 Ti Super 16gb vram OC edition</a></td><td>₹70,999</td><td><span class='badge src'>techenclave</span></td><td><span class='chip v-scam'>SCAM RISK</span></td><td class='faint'>82d ago</td></tr><tr><td><a href="https://reddit.com/r/IndianGaming/comments/1ttg3sn/sale_loq_i5_12450h406016gb512gb_ssd/" target="_blank">[SALE] LOQ i5 12450H/4060/16GB/512GB SSD</a></td><td>₹65,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip v-scam'>SCAM RISK</span></td><td class='faint'>82d ago</td></tr><tr><td><a href="https://reddit.com/r/IndianGaming/comments/1ttkgqi/building_my_first_gaming_pc_need_help_on_a_few/" target="_blank">Building my first gaming PC. Need help on a few decisions</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip v-scam'>SCAM RISK</span></td><td class='faint'>82d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzqd6/h_subscription_vochers_w_upiamzpay_20_to_40/" target="_blank">[h] subscription &amp; vochers [w] upi/amzpay 20 to 40</a></td><td>₹1,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv16ul/h_fitpass_pro_12_months_from_bob_w_upi55k/" target="_blank">[H] Fitpass Pro 12 Months From BOB [W] UPI/5.5K</a></td><td>₹5,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2d7l/h_prime_video_4k_premium_1_year_w_200slot/" target="_blank">[H] Prime Video 4K Premium - 1 Year [W] 200/slot</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv3d6t/hkalyan_gift_voucher_worth_2k_w_16k_upi/" target="_blank">[H]Kalyan Gift voucher worth 2k [W] 1.6k UPI</a></td><td>₹2,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv3ptn/h_upi_95_w_electricity_bill_payment_32k/" target="_blank">[H] UPI 95% [W] Electricity Bill payment 32k</a></td><td>₹32,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv41ta/h_1200_upi_w_jh_premium_1_year_4k/" target="_blank">[H] 1200 UPI [W] JH premium 1 year 4k</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv4ztj/h_jh_premium_1_yr_1_month_w_500_rs_60_rs/" target="_blank">[H] JH Premium 1 yr/ 1 month [W] 500 rs / 60 rs</a></td><td>₹500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv55ib/h_taj_voucher_10000_w_8500_upi/" target="_blank">[H] Taj Voucher ₹10000 [W] ₹8500 UPI</a></td><td>₹10,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv5h9a/h_easymytrip_800_off_on_round_trip_flights_w_upi/" target="_blank">[H] Easymytrip 800₹ off on round trip Flights [W] UPI 100</a></td><td>₹800</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7cez/h_95_w_electricity_bill_payment/" target="_blank">[H] 95% [W] Electricity Bill payment</a></td><td>₹4,050</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7ewu/h_5k_upi_w_10k_taj_voucher/" target="_blank">[H] 5K upi [w] 10k taj voucher</a></td><td>₹5,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv7je2/h_amazon_prime_lakme_salon_kalyan_jewellers_w_upi/" target="_blank">[H] Amazon Prime, Lakme Salon, Kalyan Jewellers [W] UPI</a></td><td>₹2,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8kw4/h_cultfit_elite_1_month_w_rs_950/" target="_blank">[H] Cultfit Elite 1 month [W] Rs. 950</a></td><td>₹950</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8t3p/h_upi_95_w_apay_4k_worth/" target="_blank">[H] UPI 95% [W] APAY 4k worth</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv90az/h_15k_flat_discount_on_any_flight_booking_w_upi/" target="_blank">[H] 1.5k flat discount on any flight booking [W] UPI after discount</a></td><td>₹5,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv9c0e/h_shein_800_off_on_1k_cart_coupon_w_120_rs_upi/" target="_blank">[H] shein 800 off on 1k cart coupon [W] 120 rs upi</a></td><td>₹1,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv9ct2/h_6000_w_10k_taj_vocher/" target="_blank">[H] 6000 [W] 10K taj vocher</a></td><td>₹10,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vva70u/h_3000_bookmyshow_tickets_w_fitpass_cult_fit/" target="_blank">[H] ₹3000 BookMyShow Tickets [W] Fitpass, Cult Fit, Anytime Fitness</a></td><td>₹3,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vv8pcx/hbhima_voucher_44500w_42500/" target="_blank">[H]Bhima Voucher 44500/[W] 42500</a></td><td>₹44,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/dealsforindia/comments/1vvbw6o/myfitnesspal_premium_1_year_for_1500/" target="_blank">MyFitnessPal Premium 1 year for ₹1,500</a></td><td>₹1,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vvba4j/h_porter_packer_and_mover_voucher_6k_w_upi_5k/" target="_blank">[H] Porter Packer and Mover voucher 6k [W] UPI 5k</a></td><td>₹6,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vvfiri/h_1450_upi_w_2k_kalyan_gc/" target="_blank">[H] 1450 UPI [W] 2K Kalyan GC</a></td><td>₹2,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vve4q9/h_06ppoint_upi_w_air_india_maharaja_points/" target="_blank">[H] 0.6p/point - UPI [W] Air India Maharaja Points</a></td><td>₹20,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/IndiaDealsExchange/comments/1vvg11m/h_apay_650_rs_pulse_labs_w_upi_620/" target="_blank">[H] Apay 650 rs ( pulse labs ) [W] Upi 620</a></td><td>₹650</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uu9hzb/wts_complete_gaming_pc_ryzen_5_5600x_rtx_3080_fe/" target="_blank">[WTS] Complete Gaming PC – Ryzen 5 5600X | RTX 3080 FE | 32GB DDR4-360</a></td><td>₹79,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uu9rct/hp_240_g9_for_sale_36000_shipping/" target="_blank">HP 240 G9 For Sale 36000+ shipping.</a></td><td>₹36,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uv2kqt/for_sale_8tb_x_2_western_digital_red_plus_hdd/" target="_blank">For Sale 8TB x 2 Western Digital Red Plus HDD</a></td><td>₹30,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uw0guu/wts_2tb_laptop_hdd_100_health_5200_shipping/" target="_blank">[WTS] 2TB Laptop HDD | 100% Health | ₹5,200+ Shipping</a></td><td>₹5,200</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uw0vn9/wts_hp_victus_gaming_laptop_ryzen_5_5600h_rx/" target="_blank">[WTS] HP Victus Gaming Laptop | Ryzen 5 5600H | RX 6500M 4GB | Brand N</a></td><td>₹46,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uwwnwa/wts_lenovo_thinkcentre_m710_tiny_intel_core_i3/" target="_blank">[WTS] Lenovo ThinkCentre M710 Tiny | Intel Core i3 7th Gen | A-Grade |</a></td><td>₹3,300</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1ux2z23/inddl_h_logitech_brio_4k_webcam_w_cashupi/" target="_blank">[IND-DL] [H] Logitech Brio 4K Webcam [W] Cash/UPI</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1uz995i/wts_hp_victus_unused/" target="_blank">[WTS] HP victus un-used.</a></td><td>₹115,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v2cj8a/nvme_1tb/" target="_blank">NVME 1TB</a></td><td>₹17,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v3508m/gaming_pc/" target="_blank">Gaming pc</a></td><td>₹120,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v3m73g/inddl_h_logitech_brio_4k_webcam_limited_time_deal/" target="_blank">[IND-DL] [H] Logitech Brio 4K Webcam 🚨 LIMITED TIME DEAL [W] Cash/UPI</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v6ai9l/selling_ryzen_7_gaming_pc_65k/" target="_blank">Selling RYZEN 7 GAMING PC | 65K</a></td><td>₹65,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v9mkvh/wts_ryzen_5_4650g/" target="_blank">WTS Ryzen 5 4650g</a></td><td>₹19,700</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1v9unks/sell_my_brand_new_20tb_hdd_seagate/" target="_blank">(SELL) MY BRAND NEW 20TB HDD SEAGATE</a></td><td>₹70,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vbmkec/buying_brokenscreen_gaming_laptop_for_desktopmode/" target="_blank">[BUYING] Broken-screen gaming laptop for desktop-mode use. Minimum Ram</a></td><td>₹25,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vg025y/wtb_refurbished_workstation_gaming_pc_25k_to_35k/" target="_blank">WTB: Refurbished Workstation / Gaming PC (₹25k to ₹35k)</a></td><td>₹25,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vhzk08/wtsbangalore_iphone_16_plus_256gb_black_original/" target="_blank">[WTS][Bangalore] iPhone 16 Plus 256GB Black | Original Bill | Box | 2 </a></td><td>₹62,999</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vi4sa6/logitech_brio_4k_webcam_w_cashupi_only_few_left/" target="_blank">Logitech Brio 4K Webcam [W] Cash/UPI Only few left</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vlp20y/inddl_h_logitech_brio_4k_webcam_hot_deal_w_cashupi/" target="_blank">[IND-DL] [H] Logitech Brio 4K Webcam 🚨 HOT DEAL [W] Cash/UPI</a></td><td>₹4,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vp3yjh/selling_laptop_ram_81632gb_bangalore/" target="_blank">Selling Laptop RAM 8/16/32GB Bangalore</a></td><td>₹3,299</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vro2ou/sell_epos_impact_760t_dual_enterprise_usbc/" target="_blank">[SELL] EPOS IMPACT 760T Dual Enterprise USB-C Headset (Brand New / Unu</a></td><td>₹10,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vsv1h3/sale_kolkata_evm_256gb_25_sata_ssd_f2f_cash_only/" target="_blank">[Sale] [Kolkata] EVM 256GB 2.5&quot; SATA SSD (F2F Cash Only)</a></td><td>₹1,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hardwareswapindia/comments/1vv0sm1/wts_asus_rog_zephyrus_m16_i9_rtx_3080_ti_32gb_ram/" target="_blank">[WTS] ASUS ROG Zephyrus M16 - i9 + RTX 3080 Ti + 32GB RAM + 2TB SSD In</a></td><td>₹130,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1uwfg6p/sale_ryzen_5_3400g_desktop_pc_with_gt_710_and/" target="_blank">[SALE] Ryzen 5 3400G Desktop PC with GT 710 and Monitor | Palghar/Mumb</a></td><td>₹20,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1uy2j3h/ind_h_dell_desktop_pc_intel_core_i3_gt_720_16gb/" target="_blank">[IND] [H] Dell Desktop PC (Intel Core i3, GT 720, 16GB RAM, 512GB SSD)</a></td><td>₹15,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1uytlv8/wts_iphone_4_or_maybe_4s_in_good_condition/" target="_blank">WTS Iphone 4 or maybe 4s in good condition</a></td><td>₹2,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1v0oc03/steam_deck_oled_512gbpristine_condition/" target="_blank">Steam Deck Oled 512gb(Pristine condition)</a></td><td>₹64,999</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1v0w9jr/wts_intel_i59500_gigabyte_b360m_gaming_hd_combo/" target="_blank">[WTS] Intel i5-9500 + Gigabyte B360M Gaming HD Combo | Box + Bill | ₹9</a></td><td>₹9,000</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1v4nlv0/raspberry_pi_4_model_b_4gb_ram_like_new/" target="_blank">Raspberry Pi 4 Model B (4GB RAM) - Like New</a></td><td>₹7,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr><tr><td><a href="https://reddit.com/r/hwswapindia/comments/1v6j0an/selling_1yo_ups_inr_1500/" target="_blank">Selling 1yo UPS | INR 1500</a></td><td>₹1,500</td><td><span class='badge src'>reddit</span></td><td><span class='chip none'>—</span></td><td class='faint'>1d ago</td></tr></tbody></table>
   </div>
-</div>
 
-  </main>
-</body>
-</html>
+  <div class="foot">Deal Hunter snapshot for external review · every title links to its real source listing · built 23 Aug 2026, 17:00</div>
+</div>
+</body></html>
