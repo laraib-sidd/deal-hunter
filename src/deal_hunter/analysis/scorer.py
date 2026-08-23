@@ -6,6 +6,7 @@ import logging
 
 from deal_hunter.analysis.normalizer import HardwareMatch, HardwareNormalizer
 from deal_hunter.analysis.pricing import (
+    FairValueEstimate,
     calculate_age_months,
     estimate_fair_value,
     price_vs_fair_pct,
@@ -46,13 +47,29 @@ def _compute_deal_score(pct: float, flag_count: int, critical_flags: int) -> int
     return max(1, min(10, round(base - penalty)))
 
 
-def _compute_verdict(score: int) -> str:
+def _compute_verdict(score: int, pct: float, critical_flags: int = 0) -> str:
+    """Map score + price-direction to a defensible verdict.
+
+    A low score has TWO very different causes, and they must not both be "SCAM_RISK":
+      - OVERPRICED (price well above fair): score is low but the item isn't a scam — it's
+        just a bad deal -> PASS.
+      - SUSPICIOUSLY CHEAP / critical risk flags: the genuine scam/defective signal ->
+        SCAM_RISK.
+
+    Critical red flags (mining/scam patterns) override everything to SCAM_RISK.
+    """
+    if critical_flags > 0:
+        return "SCAM_RISK"
     if score >= 8:
         return "BUY"
     if score >= 6:
         return "NEGOTIATE"
+    # Score < 6: split by price direction — overpriced is PASS, too-cheap-with-flags is risky.
+    if pct > 10:
+        return "PASS"
     if score >= 3:
         return "PASS"
+    # Low score AND not overpriced => the cheap/flag-driven scam suspicion.
     return "SCAM_RISK"
 
 
@@ -70,10 +87,39 @@ def _build_analysis(
     location: str,
     description: str,
     normalizer: HardwareNormalizer,
+    engine=None,
 ) -> DealAnalysis:
-    """Build a DealAnalysis from identified hardware and price."""
+    """Build a DealAnalysis from identified hardware and price.
+
+    If `engine` is given, the deprecated-MSRP model midpoint is blended toward the LIVE
+    market median from price_history (core-product fix: a deal is what the market actually
+    transacts at, not an exponential decay guess).
+    """
     age = calculate_age_months(hw.release_date)
     fair = estimate_fair_value(hw.msrp_inr, age, hw.category)
+
+    # Correct the model with live observed asking prices when available.
+    live_note = ""
+    if engine is not None and hw.msrp_inr > 0:
+        try:
+            from deal_hunter.analysis.baseline import blend_fair_value, get_market_stat
+
+            mkt = get_market_stat(engine, hw.canonical_name)
+            if mkt is not None and mkt.median and mkt.sample_ok:
+                mid = blend_fair_value(fair.midpoint, mkt.median)
+                spread = round(mid * 0.15)
+                fair = FairValueEstimate(
+                    midpoint=round(mid),
+                    low=max(round(mid - spread), 0),
+                    high=round(mid + spread),
+                    msrp=fair.msrp,
+                    age_months=fair.age_months,
+                    depreciation_pct=fair.depreciation_pct,
+                )
+                live_note = f" (live median ₹{mkt.median:,.0f} from {mkt.n} listings)"
+        except Exception:  # pragma: no cover - never let baseline break scoring
+            logger.debug("live baseline lookup failed for %s", hw.canonical_name, exc_info=True)
+
     pct = price_vs_fair_pct(price, fair)
 
     full_text = f"{hw.canonical_name} {description}".strip()
@@ -89,10 +135,10 @@ def _build_analysis(
 
     critical_count = sum(1 for f in flags if f.severity == "critical")
     score = _compute_deal_score(pct, len(flags), critical_count)
-    verdict = _compute_verdict(score)
+    verdict = _compute_verdict(score, pct, critical_count)
 
     gen_str = f" ({hw.generation})" if hw.generation else ""
-    reasoning_parts = [f"{hw.canonical_name}{gen_str}, ~{age} months old."]
+    reasoning_parts = [f"{hw.canonical_name}{gen_str}, ~{age} months old.{live_note}"]
     reasoning_parts.append(f"Fair range: ₹{fair.low:,} – ₹{fair.high:,} (mid ₹{fair.midpoint:,}).")
     if pct < -10:
         reasoning_parts.append(f"Asking ₹{price:,} is {abs(pct):.0f}% below fair — good value.")
@@ -152,11 +198,12 @@ def analyze_deal(
     description: str = "",
     normalizer: HardwareNormalizer | None = None,
     ai_api_key: str = "",
+    engine=None,
 ) -> DealAnalysis | None:
     """Analyze a listing synchronously. Uses local normalizer only.
 
-    For AI-powered analysis of unknown products, use analyze_deal_async.
-    The ai_api_key param is kept for backward compat but ignored here.
+    If `engine` is given, the fair-value model is corrected toward the live market
+    median. ai_api_key kept for backward compat (ignored here).
     """
     nrm = normalizer or HardwareNormalizer()
     hw, price = _resolve_hw_and_price(text, asking_price, description, nrm)
@@ -167,7 +214,7 @@ def analyze_deal(
     if hw.msrp_inr <= 0 or price is None:
         return None
 
-    return _build_analysis(hw, price, location, description, nrm)
+    return _build_analysis(hw, price, location, description, nrm, engine=engine)
 
 
 async def analyze_deal_async(
@@ -177,8 +224,12 @@ async def analyze_deal_async(
     description: str = "",
     normalizer: HardwareNormalizer | None = None,
     ai_api_key: str = "",
+    engine=None,
 ) -> DealAnalysis | None:
-    """Analyze a listing with AI fallback for unknown products."""
+    """Analyze a listing with AI fallback for unknown products.
+
+    If `engine` is given, the fair-value model is corrected toward the live market median.
+    """
     nrm = normalizer or HardwareNormalizer()
     hw, price = _resolve_hw_and_price(text, asking_price, description, nrm)
 
@@ -198,4 +249,4 @@ async def analyze_deal_async(
         logger.info("Could not extract price from: %s", text[:80])
         return None
 
-    return _build_analysis(hw, price, location, description, nrm)
+    return _build_analysis(hw, price, location, description, nrm, engine=engine)
