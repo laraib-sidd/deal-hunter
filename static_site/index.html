@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deal Hunter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============ DESIGN TOKENS (Linear-inspired calm dark) ============ */
+    :root {
+      --bg:          #0d0e0f;
+      --panel:       #141517;
+      --surface:     #18191b;
+      --surface-2:   #1e1f22;
+      --text-1:      #f7f8f8;
+      --text-2:      #b8bec8;
+      --text-3:      #8a8f98;
+      --text-4:      #5b5f66;
+      --accent:      #5e6ad2;
+      --accent-hi:   #7170ff;
+      --accent-hover:#828fff;
+      --deal-buy:     #27a644;
+      --deal-negotiate:#e8a33d;
+      --deal-pass:    #e05d5d;
+      --deal-scam:    #ff4949;
+      --border:       rgba(255,255,255,0.06);
+      --border-soft:  rgba(255,255,255,0.04);
+      --border-strong:rgba(255,255,255,0.09);
+      --r-xs: 2px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px;
+      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html,body { height:100%; }
+    body {
+      font-family:var(--sans);
+      background:var(--bg);
+      color:var(--text-1);
+      font-size:14px;
+      line-height:1.5;
+      -webkit-font-smoothing:antialiased;
+      font-feature-settings:'cv01','ss03';
+    }
+    .mono { font-family:var(--mono); }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+      position:sticky; top:0; z-index:50;
+      display:flex; align-items:center; gap:20px;
+      padding:0 24px; height:52px;
+      background:rgba(13,14,15,0.85);
+      backdrop-filter:blur(12px) saturate(160%);
+      border-bottom:1px solid var(--border-soft);
+    }
+    .brand { display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em; }
+    .brand .mark { width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,var(--accent-hi),var(--accent)); display:grid; place-items:center; font-size:12px; }
+    .topnav { display:flex; gap:2px; }
+    .topnav a {
+      color:var(--text-3); text-decoration:none; font-size:13px; font-weight:500;
+      padding:6px 11px; border-radius:var(--r-sm); transition:color .12s, background .12s;
+    }
+    .topnav a:hover { color:var(--text-1); }
+    .topnav a.active { color:var(--text-1); background:var(--surface-2); }
+    .topbar .spacer { flex:1; }
+    .top-actions { display:flex; align-items:center; gap:8px; }
+    .live-pill {
+      display:inline-flex; align-items:center; gap:7px;
+      font-size:12px; color:var(--text-3); padding:4px 10px;
+      border:1px solid var(--border); border-radius:9999px; background:var(--surface);
+    }
+    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--deal-buy); box-shadow:0 0 0 3px rgba(39,166,68,.18); }
+
+    /* ---------- layout ---------- */
+    .shell { max-width:1280px; margin:0 auto; padding:24px; }
+    .grid { display:grid; gap:16px; }
+    .grid-main { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+    .stack { display:flex; flex-direction:column; gap:16px; }
+    @media(max-width:960px){ .grid-main{grid-template-columns:1fr} .topbar{padding:0 14px} .shell{padding:16px} }
+
+    /* ---------- stat cards ---------- */
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+    .card {
+      background:var(--surface); border:1px solid var(--border-soft); border-radius:var(--r-md);
+      padding:16px; position:relative; overflow:hidden;
+    }
+    .card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-4); font-weight:500; }
+    .card .num { font-family:var(--mono); font-size:26px; font-weight:500; color:var(--text-1); margin-top:6px; letter-spacing:-.02em; }
+    .card .delta-line { margin-top:8px; font-size:12px; }
+    .card.accent-border { border-top:2px solid var(--accent-hi); }
+
+    /* ---------- section ---------- */
+    .section-title {
+      display:flex; align-items:baseline; justify-content:space-between;
+      margin:0 0 12px; font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-4); font-weight:600;
+    }
+
+    /* ---------- table ---------- */
+    .table-wrap { border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; background:var(--surface); }
+    table.tbl { width:100%; border-collapse:collapse; }
+    .tbl th {
+      text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text-4); font-weight:500; padding:9px 14px; background:var(--surface);
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    .tbl td { padding:10px 14px; border-bottom:1px solid var(--border-soft); vertical-align:middle; font-size:13px; }
+    .tbl tbody tr:last-child td { border-bottom:none; }
+    .tbl tbody tr:hover { background:var(--surface-2); }
+    .tbl .mono-num { font-family:var(--mono); font-size:13px; white-space:nowrap; }
+
+    /* ---------- chips ---------- */
+    .chip { display:inline-block; padding:2px 8px; border-radius:var(--r-xs); font-size:11px; font-weight:500; letter-spacing:.03em; white-space:nowrap; }
+    .chip-buy { background:rgba(39,166,68,.14); color:#4ade80; }
+    .chip-negotiate { background:rgba(232,163,61,.14); color:#f5c56b; }
+    .chip-pass { background:rgba(224,93,93,.14); color:#f18484; }
+    .chip-scam { background:rgba(255,73,73,.16); color:#ff8080; }
+    .chip-neutral { background:var(--surface-2); color:var(--text-3); }
+
+    /* ---------- price delta ---------- */
+    .delta { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:500; font-family:var(--mono); }
+    .delta-good { color:#4ade80; }
+    .delta-bad { color:#ff8080; }
+    .delta-flat { color:var(--text-3); }
+
+    /* ---------- score/signal ---------- */
+    .sig-buy { color:#4ade80; }
+    .sig-negotiate { color:#f8c56b; }
+    .sig-pass { color:#ff8080; }
+    .sig-scam { color:#ff4949; }
+    .muted { color:var(--text-3); }
+    .faint { color:var(--text-4); }
+
+    /* ---------- source pill ---------- */
+    .source-pill {
+      display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+      padding:3px 10px; border:1px solid var(--border); border-radius:9999px; background:transparent;
+    }
+    .source-pill .dot { width:6px; height:6px; border-radius:50%; background:var(--text-4); }
+    .source-pill.running .dot { background:var(--deal-buy); }
+
+    /* ---------- buttons ---------- */
+    .btn {
+      display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
+      padding:7px 12px; border-radius:var(--r-sm); border:1px solid var(--border);
+      background:rgba(255,255,255,0.02); color:var(--text-1); cursor:pointer; text-decoration:none;
+      transition:background .12s, border-color .12s, color .12s;
+    }
+    .btn:hover { background:rgba(255,255,255,0.05); border-color:var(--border-strong); }
+    .btn-primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+    .btn-sm { padding:4px 9px; font-size:12px; }
+    .btn-icon { padding:5px 9px; }
+
+    /* ---------- inputs / filter bar ---------- */
+    .filterbar {
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:16px;
+    }
+    .search-input {
+      flex:1; min-width:200px; font-family:var(--sans); font-size:13px; color:var(--text-1);
+      background:transparent; border:none; padding:6px 4px; outline:none;
+    }
+    .search-input::placeholder{color:var(--text-4);}
+    select, .select {
+      font-family:var(--sans); font-size:12px; color:var(--text-2);
+      background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 10px;
+    }
+    select:focus { outline:1px solid var(--accent-hi); }
+
+    /* ---------- link ---------- */
+    a.link { color:var(--text-1); text-decoration:none; }
+    a.link:hover { color:var(--accent-hover); }
+    a.action { color:var(--accent-hi); text-decoration:none; font-size:12px; font-weight:500; }
+    a.action:hover { color:var(--accent-hover); }
+
+    /* ---------- empty state ---------- */
+    .empty { text-align:center; padding:48px 20px; color:var(--text-3); }
+    .empty .ic { font-size:30px; opacity:.6; margin-bottom:10px; }
+    .empty p { font-size:14px; }
+    .empty .hint { font-size:12px; color:var(--text-4); margin-top:6px; }
+
+    /* ---------- banner ---------- */
+    .banner {
+      display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:var(--r-md);
+      font-size:13px; margin-bottom:16px; border:1px solid;
+    }
+    .banner.warn { background:rgba(232,163,61,.08); border-color:rgba(232,163,61,.25); color:#f8c56b; }
+    .banner.info { background:rgba(94,106,210,.08); border-color:rgba(94,106,210,.25); color:#a5adff; }
+
+    /* ---------- market pulse bar ---------- */
+    .barwrap { background:var(--surface-2); border-radius:4px; overflow:hidden; height:6px; }
+    .bar { height:100%; background:var(--accent); border-radius:4px; }
+
+    /* ---------- product / sparkline ---------- */
+    .h1 { font-size:22px; font-weight:600; letter-spacing:-.01em; }
+    .lede { color:var(--text-3); font-size:13px; margin-top:2px; }
+    .marker { color:var(--text-4); }
+
+    /* focus ring */
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+      outline:none; box-shadow:0 0 0 3px rgba(113,112,255,.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="mark">◉</span> Deal Hunter</div>
+    <nav class="topnav">
+      <a href="/" class="">Dashboard</a>
+      <a href="/marketplace" class="">Marketplace</a>
+      <a href="/deals" class="">Deals</a>
+      <a href="/watch" class="">Watch</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="top-actions">
+      <span class="live-pill"><span class="live-dot"></span> LIVE</span>
+    </div>
+  </div>
+
+  <main class="shell">
+    
+<!-- Hero stat cards -->
+<div class="cards">
+  <div class="card"><div class="lbl">New / 24h</div><div class="num">290</div><div class="delta-line"><span class="delta delta-good">↓ live scan</span></div></div>
+  <div class="card"><div class="lbl">Active listings</div><div class="num">4146</div><div class="delta-line"><span class="faint">tracked</span></div></div>
+  <div class="card accent-border"><div class="lbl">Deals <span class="faint">score≥6</span></div><div class="num sig-buy">1</div><div class="delta-line"><span class="delta delta-good">▲ buy signals</span></div></div>
+  <div class="card"><div class="lbl">Sellers</div><div class="num">0</div><div class="delta-line"><span class="faint">tracked</span></div></div>
+  <div class="card"><div class="lbl">Active watches</div><div class="num">0</div><div class="delta-line"><span class="faint">0 hits</span></div></div>
+</div>
+
+
+
+<div class="grid grid-main" style="margin-top:20px">
+  <!-- Latest listings -->
+  <section class="stack">
+    <div class="section-title"><span>Latest listings</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>Listing</th><th>Price</th><th>Source</th><th>Verdict</th><th>Score</th></tr></thead>
+        <tbody>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzqd6/h_subscription_vochers_w_upiamzpay_20_to_40/" target="_blank" rel="noopener">[h] subscription &amp; vochers [w] upi/amzpay 20 to 40</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹1,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vuzy10/h_150_w_blr_t1_lounge_access/" target="_blank" rel="noopener">[H] 150 [W] BLR T1 Lounge Access</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv04av/h_95_upi_w_50k_fk/" target="_blank" rel="noopener">[H] 95% upi [w] 50k fk</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹50,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/dealsforindia/comments/1vv05nw/mens_jeans_at_87_off/" target="_blank" rel="noopener">Men&#39;s Jeans at 87% off</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv06rx/h_upi_w_bookmyshow_or_pvr_offer_for_3_tickets/" target="_blank" rel="noopener">[H] Upi, [W] BookMyShow or PVR offer for 3 tickets</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv08wn/h_45_upi_each_w_mmt_rail_100rs_gc_need_2/" target="_blank" rel="noopener">[H] 45 UPI each [W] MMT rail 100rs gc need 2</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv0vqw/h_97upi_w_amazon_pay_gc_worth_around_rs450/" target="_blank" rel="noopener">[H] 97%upi [W] Amazon pay gc worth around rs.450</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv16ul/h_fitpass_pro_12_months_from_bob_w_upi55k/" target="_blank" rel="noopener">[H] Fitpass Pro 12 Months From BOB [W] UPI/5.5K</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹5,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv188f/h_100_upiw_sbi_wealth_rupay_select_debit_card/" target="_blank" rel="noopener">[H] 100 UPI[W] SBI Wealth RuPay Select Debit Card Bo</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹500</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1bfr/htata_cliq_fashion_rs2000_gift_card_w_80_upi/" target="_blank" rel="noopener">[H]Tata Cliq Fashion rs2000 gift card [W] 80% upi</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹2,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1byv/h_decathlon_rs_500_voucher_w_400_upi/" target="_blank" rel="noopener">[H] Decathlon rs 500 voucher [W] 400 upi</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹500</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1ddu/h_85_upi_w_uber_gc/" target="_blank" rel="noopener">[H] 85% UPI [W] Uber GC</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1dmz/h_125_upi_w_thyrocare/" target="_blank" rel="noopener">[H] 125 UPI [W] Thyrocare</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1jqb/h_90_upi_w_airtel_wifi_bill_payment_of_470/" target="_blank" rel="noopener">[H] 90% UPI [W] Airtel Wi-Fi Bill Payment of ₹470</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1nyr/h_80_upi_w_apple_store_gv/" target="_blank" rel="noopener">[H] 80 % UPI [W] Apple Store GV</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1pfv/h_upi_3001000_w_linkedin_premium/" target="_blank" rel="noopener">[H] UPI 300-1000 [W] LinkedIn Premium</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1qsc/h_94_upi_w_amazon_shopping_voucher_of_1500/" target="_blank" rel="noopener">[H] 94% UPI [W] Amazon Shopping Voucher of 1500</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv1ucz/h_93_percent_upi_w_utility_bill_payment_on_paytm/" target="_blank" rel="noopener">[H] 93 percent upi [W] utility bill payment on paytm</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv213z/h_roblox_giftcard_840_w_790_upi_amazon_gc/" target="_blank" rel="noopener">[H] Roblox Giftcard 840 [W] ₹790 UPI , Amazon GC</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹790</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv22ri/h_80_percent_upi_w_4_k_district_dining/" target="_blank" rel="noopener">[H] 80 percent UPI [W] 4 k District dining</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv238v/h_dominos_1000_gv_available_w_900_upi_exchange/" target="_blank" rel="noopener">[H] Dominos 1000 GV available [W] 900 UPI, exchange </a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹1,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv252j/h_mmt_rail_100_giftcard_w_50/" target="_blank" rel="noopener">[H] MMT Rail ₹100 Giftcard [W] ₹50</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv29n2/h_mmt_bus_gc_w_upi/" target="_blank" rel="noopener">[H] MMT Bus GC [W] UPI</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num"><span class="faint">—</span></td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2c1b/h_rupay_dc_benefits_w_upi/" target="_blank" rel="noopener">[H] Rupay DC Benefits [W] UPI</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹2,950</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+          <tr>
+            <td>
+              <a class="link" href="https://reddit.com/r/IndiaDealsExchange/comments/1vv2d7l/h_prime_video_4k_premium_1_year_w_200slot/" target="_blank" rel="noopener">[H] Prime Video 4K Premium - 1 Year [W] 200/slot</a>
+              <div class="faint" style="font-size:11px;margin-top:2px">reddit · 22 Aug 16:07</div>
+            </td>
+            <td class="mono-num">₹4,000</td>
+            <td><span class="source-pill running"><span class="dot"></span>reddit</span></td>
+            <td><span class="chip chip-neutral">—</span></td>
+            <td class="mono-num"></td>
+          </tr>
+        
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Right rail -->
+  <div class="stack">
+    <section class="stack">
+      <div class="section-title"><span>Market pulse</span></div>
+      <div class="stack" style="gap:8px">
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 4060" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 4060</span><span class="faint mono">3 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/AMD Ryzen 7 7800X3D" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">AMD Ryzen 7 7800X3D</span><span class="faint mono">3 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/AMD Ryzen 5 7600X" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">AMD Ryzen 5 7600X</span><span class="faint mono">3 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:100.0%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 3080" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 3080</span><span class="faint mono">2 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:66.66666666666666%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 3060" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 3060</span><span class="faint mono">2 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:66.66666666666666%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 4090" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 4090</span><span class="faint mono">1 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 4080" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 4080</span><span class="faint mono">1 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
+        </a>
+      
+        <a class="link" href="/product/NVIDIA GeForce RTX 4070 Ti Super" style="display:block">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span class="muted">NVIDIA GeForce RTX 4070 Ti Super</span><span class="faint mono">1 listings</span>
+          </div>
+          <div class="barwrap"><div class="bar" style="width:33.33333333333333%"></div></div>
+        </a>
+      
+      
+      </div>
+    </section>
+
+    <section class="stack">
+      <div class="section-title"><span>By source</span></div>
+      
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+        <span class="source-pill running"><span class="dot"></span>reddit</span>
+        <span class="muted" style="margin-left:auto">3792</span>
+      </div>
+      
+      <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+        <span class="source-pill running"><span class="dot"></span>techenclave</span>
+        <span class="muted" style="margin-left:auto">354</span>
+      </div>
+      
+    </section>
+  </div>
+</div>
+
+  </main>
+</body>
+</html>

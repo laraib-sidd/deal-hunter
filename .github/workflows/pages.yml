@@ -1,0 +1,39 @@
+name: Deploy static dashboard snapshot to GitHub Pages
+
+# SNAPSHOT ONLY: GitHub Pages cannot serve the FastAPI app or read the DB. This renders
+# the dashboard routes to static HTML (using the repo's checked-in test fixtures / the
+# local DB if present from a prior run) and publishes that snapshot to the gh-pages branch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  publish-pages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv + deps
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Snapshot dashboard to static HTML
+        run: |
+          uv run python scripts/snapshot_site.py
+
+      - name: Publish to gh-pages (GitHub Pages)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: static_site
+          publish_branch: gh-pages
+          force_orphan: true   # clean snapshot, no old files
