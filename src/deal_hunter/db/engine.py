@@ -17,6 +17,7 @@ from deal_hunter.db.repo_listings import (
     search_listings,
     upsert_listings,
 )
+from deal_hunter.db.repo_meta import RunLog  # noqa: F401  (registers run_logs metadata)
 from deal_hunter.db.repo_prices import (
     get_price_history,
     get_price_summary,
