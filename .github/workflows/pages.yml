@@ -12,9 +12,11 @@ jobs:
   publish-pages:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write  # needed to push the gh-pages branch
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the page action has origin + all branches
 
       - name: Set up Python
         uses: actions/setup-python@v5
