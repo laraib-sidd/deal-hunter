@@ -112,3 +112,73 @@ class WatchHit(SQLModel, table=True):
     listing_id: int = Field(index=True)
     score_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     alerted_at: datetime | None = Field(default=None, index=True)
+
+
+# ============================ Catalog (M4) ============================
+
+
+class Product(SQLModel, table=True):
+    """A hardware product in the scalable catalog (replaces JSON hardware_db as truth)."""
+
+    __tablename__ = "products"
+
+    id: int | None = Field(default=None, primary_key=True)
+    hardware_id: str = Field(index=True, unique=True)  # stable slug: "nvidia-rtx-3080"
+    canonical_name: str = Field(index=True)
+    category: str = Field(index=True)  # gpu|cpu|ram|ssd|monitor|motherboard|psu|laptop|...
+    brand: str = ""
+    series: str = ""
+    generation: str = ""
+    release_date: str | None = None  # "YYYY-MM"
+    msrp_inr: int | None = None
+    source: str = Field(default="curated")  # curated | bundled | ai
+    confidence: float = Field(default=1.0)
+    specs_json: str = ""  # JSON: {vram_gb, tdp_w, cores, socket, mining_popular, ...}
+    mining_popular: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ProductAlias(SQLModel, table=True):
+    """An alias token -> product (the hot path for matching many listing titles)."""
+
+    __tablename__ = "product_aliases"
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="products.id", index=True)
+    alias: str = Field(index=True)  # lowercased: "rtx 3080", "3080", ...
+    confidence: float = Field(default=1.0)
+    source: str = Field(default="curated")
+
+
+class ProductSpec(SQLModel, table=True):
+    """Optional key/value spec variants for a product."""
+
+    __tablename__ = "product_specs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="products.id", index=True)
+    key: str = Field(index=True)
+    value: str = ""
+
+
+class MsrpHistory(SQLModel, table=True):
+    """MSRP changes over time (currency moves / official drops)."""
+
+    __tablename__ = "msrp_history"
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="products.id", index=True)
+    msrp_inr: int
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    source: str = ""
+
+
+class CityTier(SQLModel, table=True):
+    """Indian city -> tier, replacing the hardcoded dict in JSON."""
+
+    __tablename__ = "city_tiers"
+
+    id: int | None = Field(default=None, primary_key=True)
+    city: str = Field(index=True, unique=True)
+    tier: int = Field(default=2)
