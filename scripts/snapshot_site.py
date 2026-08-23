@@ -90,7 +90,11 @@ def _time_ago(dt) -> str:
 
 
 def _ensure_demo(engine) -> None:
-    """Seed demo data + catalog if the DB is empty (fresh CI checkout)."""
+    """Seed data so the snapshot isn't empty (fresh CI checkout lacks the live DB).
+
+    First tries the bundled real-data JSON (listings_snapshot.json); if absent, falls
+    back to a small demo seed with the catalog.
+    """
     from datetime import UTC, datetime
 
     from sqlalchemy import func
@@ -100,7 +104,37 @@ def _ensure_demo(engine) -> None:
     with Session(engine) as s:
         count = s.exec(select(func.count(Listing.id))).one()
     if count:
+        return  # real DB present (local build)
+
+    snapshot_path = Path(__file__).parent.parent / "data" / "listings_snapshot.json"
+    if snapshot_path.exists():
+        import json
+
+        rows = json.loads(snapshot_path.read_text())
+
+        with Session(engine) as s:
+            for r in rows:
+                s.add(Listing(
+                    source=r.get("source", "web"),
+                    source_id=str(r.get("url", "")),
+                    fingerprint=Listing.compute_fingerprint(
+                        r.get("title", ""), r.get("price"), r.get("location")
+                    ),
+                    url=r.get("url", ""),
+                    title=r.get("title", ""),
+                    price=r.get("price"),
+                    category=r.get("category", "other"),
+                    canonical_name=r.get("canonical_name"),
+                    location=r.get("location"),
+                    scraped_at=datetime.fromisoformat(r["scraped_at"]) if r.get("scraped_at") else datetime.now(UTC),
+                    deal_verdict=r.get("deal_verdict"),
+                    deal_score=r.get("deal_score"),
+                ))
+            s.commit()
+        print(f"Seeded {len(rows)} real listings from bundled snapshot")
         return
+
+    # Fallback: catalog + a couple of demo listings
     CatalogService(engine).seed_from_json()
     now = datetime.now(UTC)
     demo = [
