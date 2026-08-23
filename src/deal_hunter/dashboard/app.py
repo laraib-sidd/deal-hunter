@@ -198,11 +198,23 @@ def watch(request: Request):
 
 @app.get("/health", response_class=HTMLResponse)
 def health():
-    overview = dash_overview(_db())
+    from deal_hunter.db.repo_meta import last_run_summary
+
+    db = _db()
+    overview = dash_overview(db)
+    last = last_run_summary(db)
     body = (
         "ok — "
         f"listings={overview['total']} "
         f"sellers={overview['sellers']} "
         f"watches={overview['watches']}"
     )
+    if last:
+        body += (
+            f"\nlast_run: {last['source']} scraped={last['scraped']} "
+            f"failed={last['failed']} circuit={last['circuit_state']} "
+            f"ms={last['duration_ms']} ({last['started_at']:%H:%M:%S})"
+        )
+    else:
+        body += "\nlast_run: none yet"
     return HTMLResponse(f"<pre>{body}</pre>")
