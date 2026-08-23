@@ -21,6 +21,7 @@ from deal_hunter.db.repo_prices import (
     get_price_history,
     get_price_summary,
     record_price,
+    record_prices,
 )
 
 # Re-exported repo helpers so existing `from deal_hunter.db.engine import X` keeps working.
@@ -30,6 +31,7 @@ __all__ = [
     "search_listings",
     "get_recent_listings",
     "record_price",
+    "record_prices",
     "get_price_history",
     "get_price_summary",
 ]

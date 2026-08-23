@@ -26,7 +26,7 @@ class Listing(SQLModel, table=True):
     canonical_name: str | None = None
     location: str | None = None
     seller_name: str | None = None
-    seller_id: int | None = Field(default=None, index=True)  # FK -> sellers.id
+    seller_id: int | None = Field(default=None, index=True, foreign_key="sellers.id")
     posted_at: datetime | None = None
     scraped_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

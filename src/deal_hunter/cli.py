@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 import typer
@@ -326,9 +327,12 @@ def deals(
     api_key = config.groq_api_key if ai else ""
 
     async def _score_all() -> list[tuple]:
-        from deal_hunter.db.engine import record_price
+        from deal_hunter.db.engine import record_prices
+        from deal_hunter.db.models import PriceSnapshot
 
         scored: list[tuple] = []
+        snapshots: list[PriceSnapshot] = []
+        now = datetime.now(UTC)
         for listing in all_listings:
             analysis = await analyze_deal_async(
                 text=listing.title,
@@ -341,19 +345,22 @@ def deals(
             if analysis is None:
                 continue
 
-            # Record price for history tracking
-            record_price(
-                engine,
+            # Record price for history tracking (batched after the loop — one transaction)
+            snapshots.append(PriceSnapshot(
                 canonical_name=analysis.canonical_name,
-                price=analysis.asking_price,
                 category=analysis.category,
                 source=listing.source,
+                price=analysis.asking_price,
                 listing_url=listing.url,
                 location=listing.location,
-            )
+                observed_at=now,
+            ))
 
             if analysis.deal_score >= min_score:
                 scored.append((listing, analysis))
+
+        if snapshots:
+            record_prices(engine, snapshots)
         return scored
 
     with console.status("[bold green]Scoring deals..."):
