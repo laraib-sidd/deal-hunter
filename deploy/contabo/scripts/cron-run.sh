@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# Triggered by cron every 2 hours. Runs the full pipeline in Docker.
+# Triggered by cron every 2 hours. Runs the pipeline in a one-shot container.
 set -euo pipefail
 
 cd /opt/deal-hunter
 
 echo "=== [$(date)] deal-hunter cron start ==="
-
-# Run scrape + ingest + score + notify in a fresh container
-docker compose up --abort-on-container-exit 2>&1
-
+docker compose run --rm run
 echo "=== [$(date)] deal-hunter cron end ==="

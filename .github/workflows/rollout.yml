@@ -1,0 +1,114 @@
+name: Rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Git commit SHA to deploy
+        required: false
+        type: string
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    environment: vps
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          IMAGE_TAG: ${{ github.event.inputs.sha || github.sha }}
+          DEAL_HUNTER_GROQ_API_KEY: ${{ secrets.DEAL_HUNTER_GROQ_API_KEY }}
+          DEAL_HUNTER_REDDIT_CLIENT_ID: ${{ secrets.DEAL_HUNTER_REDDIT_CLIENT_ID }}
+          DEAL_HUNTER_REDDIT_CLIENT_SECRET: ${{ secrets.DEAL_HUNTER_REDDIT_CLIENT_SECRET }}
+          DEAL_HUNTER_TELEGRAM__ENABLED: ${{ secrets.DEAL_HUNTER_TELEGRAM__ENABLED }}
+          DEAL_HUNTER_TELEGRAM__BOT_TOKEN: ${{ secrets.DEAL_HUNTER_TELEGRAM__BOT_TOKEN }}
+          DEAL_HUNTER_TELEGRAM__CHAT_ID: ${{ secrets.DEAL_HUNTER_TELEGRAM__CHAT_ID }}
+        run: |
+          set -euo pipefail
+          KEY="${SSH_PRIVATE_KEY:-${VPS_SSH_KEY:-}}"
+          USERNAME="${VPS_USER:-root}"
+          if [ -z "${VPS_HOST:-}" ] || [ -z "$KEY" ]; then
+            echo "rollout skipped: secrets not set"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o IdentitiesOnly=yes)
+          if [ -n "${SSH_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+            SSH_OPTS+=(-o StrictHostKeyChecking=yes)
+          else
+            SSH_OPTS+=(-o StrictHostKeyChecking=accept-new)
+          fi
+
+          TARGET="${USERNAME}@${VPS_HOST}"
+          REMOTE_DIR=/opt/deal-hunter
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          os.environ["DEAL_HUNTER_IMAGE_TAG"] = os.environ["IMAGE_TAG"]
+          os.environ.setdefault("DEAL_HUNTER_DB_PATH", "/data/deals.db")
+          keys = [
+              "DEAL_HUNTER_IMAGE_TAG",
+              "DEAL_HUNTER_GROQ_API_KEY",
+              "DEAL_HUNTER_REDDIT_CLIENT_ID",
+              "DEAL_HUNTER_REDDIT_CLIENT_SECRET",
+              "DEAL_HUNTER_TELEGRAM__ENABLED",
+              "DEAL_HUNTER_TELEGRAM__BOT_TOKEN",
+              "DEAL_HUNTER_TELEGRAM__CHAT_ID",
+              "DEAL_HUNTER_DB_PATH",
+          ]
+          lines = [f"{k}={os.environ.get(k, '')}" for k in keys]
+          path = Path.home() / "deal-hunter.env"
+          path.write_text("\n".join(lines) + "\n")
+          path.chmod(0o600)
+          PY
+
+          ssh "${SSH_OPTS[@]}" "$TARGET" "mkdir -p $REMOTE_DIR"
+          scp "${SSH_OPTS[@]}" deploy/contabo/docker-compose.yml "$TARGET:$REMOTE_DIR/docker-compose.yml"
+          scp "${SSH_OPTS[@]}" "$HOME/deal-hunter.env" "$TARGET:$REMOTE_DIR/.env"
+          scp "${SSH_OPTS[@]}" \
+            deploy/contabo/scripts/cron-run.sh \
+            deploy/contabo/scripts/healthcheck.sh \
+            deploy/contabo/scripts/backup-db.sh \
+            "$TARGET:$REMOTE_DIR/"
+          rm -f "$HOME/deal-hunter.env"
+
+          ssh "${SSH_OPTS[@]}" "$TARGET" "chmod +x $REMOTE_DIR/cron-run.sh $REMOTE_DIR/healthcheck.sh $REMOTE_DIR/backup-db.sh"
+
+          ssh "${SSH_OPTS[@]}" "$TARGET" "bash -s" <<'REMOTE_CRON'
+          set -euo pipefail
+          (crontab -l 2>/dev/null | grep -v deal-hunter; cat <<'CRON'
+          # deal-hunter: scrape + score every 2 hours
+          0 */2 * * * /opt/deal-hunter/cron-run.sh >> /var/log/deal-hunter.log 2>&1
+          # deal-hunter: health check hourly
+          0 * * * * /opt/deal-hunter/healthcheck.sh >> /var/log/deal-hunter-health.log 2>&1
+          # deal-hunter: daily sqlite backup
+          15 3 * * * /opt/deal-hunter/backup-db.sh >> /var/log/deal-hunter-backup.log 2>&1
+          CRON
+          ) | crontab -
+          REMOTE_CRON
+
+          ssh "${SSH_OPTS[@]}" "$TARGET" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$REMOTE_DIR"
+          if [ ! -f .volume-chowned ]; then
+            docker run --rm -v deal-hunter_deal-hunter-data:/data alpine chown -R 1000:1000 /data
+            touch .volume-chowned
+          fi
+          docker compose pull
+          docker compose up -d web
+          REMOTE

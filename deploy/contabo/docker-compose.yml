@@ -1,32 +1,45 @@
 services:
-  deal-hunter:
-    image: ghcr.io/laraib-sidd/deal-hunter:latest
-    container_name: deal-hunter
-    restart: "no"  # cron triggers runs, not restart policy
+  web:
+    image: ${DEAL_HUNTER_IMAGE:-ghcr.io/laraib-sidd/deal-hunter}:${DEAL_HUNTER_IMAGE_TAG}
+    restart: unless-stopped
     env_file: .env
     volumes:
       - deal-hunter-data:/data
-    # Default entrypoint runs the full pipeline in one process
-    entrypoint: ["sh", "-c"]
     command:
-      - |
-        echo "[$(date)] Starting deal-hunter run..."
-        deal-hunter run --ai --min-score 6 --notify && \
-        echo "[$(date)] Run complete."
+      - python
+      - -m
+      - deal_hunter.serve
+      - dash
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+    ports:
+      - 127.0.0.1:8001:8001
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8001/health").read()
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Watchtower for auto-deploy (reuses the one from sidekick if already running)
-  # Uncomment only if sidekick's watchtower isn't watching this container
-  # watchtower:
-  #   image: containrrr/watchtower:latest
-  #   container_name: deal-hunter-watchtower
-  #   restart: unless-stopped
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     - WATCHTOWER_CLEANUP=true
-  #     - WATCHTOWER_LABEL_ENABLE=false
-  #     - WATCHTOWER_SCOPE=deal-hunter
-  #   command: --interval 300 deal-hunter
+  run:
+    image: ${DEAL_HUNTER_IMAGE:-ghcr.io/laraib-sidd/deal-hunter}:${DEAL_HUNTER_IMAGE_TAG}
+    restart: "no"
+    env_file: .env
+    volumes:
+      - deal-hunter-data:/data
+    command:
+      - deal-hunter
+      - run
+      - --ai
+      - --min-score
+      - "6"
+      - --notify
 
 volumes:
   deal-hunter-data:

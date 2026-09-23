@@ -5,7 +5,7 @@ lightweight HTML with GET forms for filtering.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -292,4 +292,13 @@ def health():
         )
     else:
         body += "\nlast_run: none yet"
-    return HTMLResponse(f"<pre>{body}</pre>")
+    status_code = 200
+    if last is None:
+        status_code = 503
+    else:
+        started = last["started_at"]
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if datetime.now(UTC) - started >= timedelta(hours=3):
+            status_code = 503
+    return HTMLResponse(f"<pre>{body}</pre>", status_code=status_code)
