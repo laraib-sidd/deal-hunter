@@ -11,7 +11,7 @@ import praw
 from deal_hunter.config import AppConfig
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
-from deal_hunter.scrapers.parsing import extract_location, extract_price
+from deal_hunter.scrapers.parsing import classify_intent, extract_location, extract_price, is_spam_post
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ DEFAULT_SUBREDDITS = [
     "dealsforindia",         # 120K+ members, verified India deals
 ]
 
-# Deal-focused subs where we skip the hardware requirement
+# Deal-focused subs — same hardware bar as swap subs, plus intent classification
 DEAL_SUBREDDITS = {"IndiaDealsExchange", "dealsforindia"}
 
 # Sale intent detection — broader to catch more listing styles
@@ -53,49 +53,23 @@ _HARDWARE_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# Coupon/promo detection for deal-focused subreddits
-_COUPON_PATTERNS = re.compile(
-    r"\b(?:coupon|promo\s*code|discount|cashback|voucher|off|save|free|loot|"
-    r"flight|ticket|hotel|booking|travel|makemytrip|easemytrip|cleartrip|"
-    r"irctc|indigo|spicejet|airindia|goibibo|yatra|mmt)\b",
-    re.IGNORECASE,
-)
-
-# High-volume trade/UPI spam that pollutes the marketplace but isn't real hardware for sale.
-# Matches explicit trade ratios ("95% upi", "100 upi", "500 upi") and gift-card trades,
-# but NOT a bare payment-method mention ("will pay via upi") in an otherwise-honest listing.
-_SPAM_PATTERNS = re.compile(
-    r"(?:\b\d{1,3}(?:%|\s)?\s*upi\b"          # "95% upi", "100 upi"
-    r"\b|\bg[i]?ft\s*card\b|\bpaytm\s*cash\b"
-    r"|amazon\s*(?:pay)?\s*gc\b|flipkart\s*gc\b"
-    r"|\b\w+\s*gc\b\s+\[w\]|\b\[w\]\s+.*?\bupi\b)",
-    re.IGNORECASE,
-)
-
-
-def _is_spam_post(title: str, body: str) -> bool:
-    """True if the post is finance/trade/UPI spam, not a hardware listing."""
-    text = f"{title} {body}"
-    return bool(_SPAM_PATTERNS.search(text))
-
 
 def _is_hardware_sale_post(title: str, body: str) -> bool:
     """Check if a post is a hardware buy/sell listing."""
     text = f"{title} {body}"
-    if _is_spam_post(title, body):
+    if is_spam_post(title, body):
         return False
     return bool(_SALE_PATTERNS.search(text) and _HARDWARE_PATTERNS.search(text))
 
 
 def _is_deal_post(title: str, body: str) -> bool:
-    """Check if a post is a deal/coupon/offer — for deal-focused subreddits.
+    """Check if a post qualifies from deal-focused subreddits.
 
-    Excludes finance/UPI trade spam even in deal subs.
+    Same sale-and-hardware bar as swap subs, plus classify_intent to drop coupons/noise.
     """
-    if _is_spam_post(title, body):
+    if not _is_hardware_sale_post(title, body):
         return False
-    text = f"{title} {body}"
-    return bool(_COUPON_PATTERNS.search(text) or _SALE_PATTERNS.search(text))
+    return classify_intent(title, body) != "other"
 
 
 class RedditScraper(BaseScraper):
@@ -119,7 +93,12 @@ class RedditScraper(BaseScraper):
     def source_name(self) -> str:
         return "reddit"
 
-    async def scrape(self, keywords: list[str] | None = None, max_pages: int = 3) -> list[Listing]:
+    async def scrape(
+        self,
+        keywords: list[str] | None = None,
+        max_pages: int = 3,
+        known_ids: set[str] | None = None,
+    ) -> list[Listing]:
         """Fetch hardware buy/sell posts from configured subreddits.
 
         PRAW is synchronous, so this runs in an executor to not block the event loop.
@@ -138,9 +117,14 @@ class RedditScraper(BaseScraper):
             os.environ.setdefault("SSL_CERT_FILE", netskope_ca)
 
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._scrape_sync, keywords, max_pages)
+        return await loop.run_in_executor(None, self._scrape_sync, keywords, max_pages, known_ids)
 
-    def _scrape_sync(self, keywords: list[str] | None, max_pages: int) -> list[Listing]:
+    def _scrape_sync(
+        self,
+        keywords: list[str] | None,
+        max_pages: int,
+        known_ids: set[str] | None,
+    ) -> list[Listing]:
         """Synchronous scraping with PRAW.
 
         Scrapes hardware subs and deal subs separately so high-volume deal subs
@@ -152,6 +136,7 @@ class RedditScraper(BaseScraper):
             user_agent="DealHunter/0.1 (personal hardware deal finder)",
         )
 
+        known = known_ids or set()
         hardware_subs = [s for s in self._subreddits if s not in DEAL_SUBREDDITS]
         deal_subs = [s for s in self._subreddits if s in DEAL_SUBREDDITS]
         listings: list[Listing] = []
@@ -162,6 +147,8 @@ class RedditScraper(BaseScraper):
             logger.info("Scanning r/%s (limit=%d)", sub, hw_limit)
             try:
                 for submission in reddit.subreddit(sub).new(limit=hw_limit):
+                    if submission.id in known:
+                        break
                     title = submission.title
                     body = submission.selftext or ""
                     if not _is_hardware_sale_post(title, body):
@@ -170,13 +157,15 @@ class RedditScraper(BaseScraper):
             except Exception as e:
                 logger.warning("r/%s failed: %s", sub, e)
 
-        # Deal subs — combined feed, looser filter
+        # Deal subs — combined feed, hardware + intent filter
         if deal_subs:
             deal_limit = max_pages * self._limit
             multi = "+".join(deal_subs)
             logger.info("Scanning deal subs r/%s (limit=%d)", multi, deal_limit)
             try:
                 for submission in reddit.subreddit(multi).new(limit=deal_limit):
+                    if submission.id in known:
+                        break
                     title = submission.title
                     body = submission.selftext or ""
                     if not _is_deal_post(title, body):
@@ -208,4 +197,3 @@ class RedditScraper(BaseScraper):
             seller_name=str(submission.author) if submission.author else None,
             posted_at=posted_at,
         )
-

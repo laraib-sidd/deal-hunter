@@ -91,13 +91,27 @@ def parse_query(text: str) -> tuple[str, float | None, list[str]]:
 
 
 # ------------------------------- search + format
-def search_listings(engine, keywords: str, max_price: float | None, limit: int = 6) -> list[Listing]:
+def search_listings(
+    engine,
+    keywords: str,
+    max_price: float | None,
+    limit: int = 6,
+    locations: list[str] | None = None,
+) -> list[Listing]:
     with Session(engine) as session:
         stmt = select(Listing).where(Listing.status == "active")
         if max_price is not None:
             stmt = stmt.where(Listing.price.is_not(None), Listing.price <= max_price)
         stmt = stmt.order_by(col(Listing.scraped_at).desc()).limit(300)
         rows = list(session.exec(stmt).all())
+
+    if locations:
+        locs = [loc.lower() for loc in locations if loc]
+        rows = [
+            row
+            for row in rows
+            if row.location and any(loc in row.location.lower() for loc in locs)
+        ]
 
     kws = [k for k in keywords.lower().split() if len(k) >= 2]
     if not kws:
@@ -195,7 +209,7 @@ async def on_message(update: Update, _ctx) -> None:
         return
     keywords, max_price, locations = parse_query(text)
     try:
-        results = search_listings(_db(), keywords, max_price)
+        results = search_listings(_db(), keywords, max_price, locations=locations)
     except Exception:
         logger.exception("query failed")
         await update.message.reply_text("⚠️ Something broke — try again.")

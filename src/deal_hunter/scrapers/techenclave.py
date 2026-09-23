@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import time
 from datetime import datetime
 
 from deal_hunter.config import AppConfig
 from deal_hunter.db.models import Listing
 from deal_hunter.scrapers.base import BaseScraper
 from deal_hunter.scrapers.http import HttpFetcher
-from deal_hunter.scrapers.parsing import extract_location, extract_price, strip_html
+from deal_hunter.scrapers.parsing import classify_intent, extract_location, extract_price, strip_html
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,35 @@ MARKETPLACE_CATEGORIES = {
     18: "looking-to-buy",   # WTB posts
 }
 DEFAULT_CATEGORY_ID = 64  # Classifieds
-# Hardware-related tags on TechEnclave
-HARDWARE_TAGS = {"graphic-cards", "cpumobo", "storage-solutions", "pc-peripherals", "monitors"}
+MAX_DETAIL_FETCHES = 40
+
+
+def _watermark_max(known_ids: set[str]) -> int | None:
+    if not known_ids:
+        return None
+    return max(int(topic_id) for topic_id in known_ids)
+
+
+def _topic_was_bumped(topic: dict) -> bool:
+    created_at = topic.get("created_at")
+    if not created_at:
+        return False
+    for field in ("bumped_at", "last_posted_at"):
+        bumped_at = topic.get(field)
+        if bumped_at and bumped_at > created_at:
+            return True
+    return False
+
+
+def _past_watermark(topic_id: int, known_ids: set[str]) -> bool:
+    watermark = _watermark_max(known_ids)
+    return watermark is not None and topic_id <= watermark
 
 
 class TechEnclaveScraper(BaseScraper):
     """Scrapes TechEnclave Trading Post > Classifieds via Discourse JSON API."""
+
+    list_fetch_exhausted: bool = False
 
     def __init__(self, config: AppConfig | None = None) -> None:
         cfg = config or AppConfig()
@@ -41,47 +64,68 @@ class TechEnclaveScraper(BaseScraper):
     def source_name(self) -> str:
         return "techenclave"
 
-    async def scrape(self, keywords: list[str] | None = None, max_pages: int = 3) -> list[Listing]:
+    async def scrape(
+        self,
+        keywords: list[str] | None = None,
+        max_pages: int = 3,
+        known_ids: set[str] | None = None,
+    ) -> list[Listing]:
         """Fetch listings from TechEnclave classifieds.
 
         Uses the shared HttpFetcher (timeout + retry/backoff + global deadline) so a slow
         or hanging page cannot block the whole run indefinitely.
         """
-        deadline = asyncio.get_event_loop().time() + self._deadline_seconds
+        self.list_fetch_exhausted = False
+        deadline = time.monotonic() + self._deadline_seconds
+        known = known_ids or set()
 
         async with HttpFetcher(timeout=self._timeout, netskope_ca=self._netskope_ca) as client:
             if keywords:
-                topics = await self._search_topics(client, keywords, max_pages)
+                topic_refs = await self._search_topics(client, keywords, max_pages, known)
             else:
-                topics = await self._fetch_category_topics(client, max_pages)
+                topic_refs = await self._fetch_category_topics(client, max_pages, known)
 
-            listings = []
-            for topic in topics:
-                if asyncio.get_event_loop().time() > deadline:
+            listings: list[Listing] = []
+            detail_fetches = 0
+            for cat_id, cat_slug, topic in topic_refs:
+                if time.monotonic() > deadline:
                     logger.warning("TE scrape hit global deadline — stopping early")
                     break
-                listing = await self._fetch_topic_detail(client, topic)
+                if detail_fetches >= MAX_DETAIL_FETCHES:
+                    logger.info("TE detail-fetch cap (%d) reached — stopping early", MAX_DETAIL_FETCHES)
+                    break
+
+                topic_id = str(topic["id"])
+                if topic_id in known and not _topic_was_bumped(topic):
+                    continue
+
+                listing = await self._fetch_topic_detail(client, topic, cat_id, cat_slug)
+                detail_fetches += 1
                 if listing:
                     listings.append(listing)
-                await asyncio.sleep(self._request_delay)
 
             self._log_results(len(listings))
             return listings
 
     async def _fetch_category_topics(
-        self, client: HttpFetcher, max_pages: int
-    ) -> list[dict]:
-        """Paginate through marketplace categories."""
-        topics: list[dict] = []
+        self,
+        client: HttpFetcher,
+        max_pages: int,
+        known_ids: set[str],
+    ) -> list[tuple[int, str, dict]]:
+        """Paginate marketplace categories; stop paging when a known topic id appears."""
+        topic_refs: list[tuple[int, str, dict]] = []
+        seen_ids: set[int] = set()
 
         for cat_id, cat_slug in MARKETPLACE_CATEGORIES.items():
             for page in range(max_pages):
                 url = f"{BASE_URL}/c/trading-post/{cat_slug}/{cat_id}.json"
                 resp = await client.get(url, params={"page": page}, host_min_interval=self._request_delay)
-                if resp is None:
-                    logger.warning("TE %s page %d failed after retries", cat_slug, page)
+                if resp.status == "exhausted":
+                    self.list_fetch_exhausted = True
+                    logger.warning("TE %s page %d exhausted retries", cat_slug, page)
                     break
-                if resp.status_code != 200:
+                if resp.status != "success":
                     logger.warning("TE %s page %d returned %d", cat_slug, page, resp.status_code)
                     break
 
@@ -90,53 +134,94 @@ class TechEnclaveScraper(BaseScraper):
                 if not page_topics:
                     break
 
-                # Include all topics — classifieds has coupons, travel deals, etc. beyond hardware
-                topics.extend(page_topics)
+                stop_paging = False
+                for topic in page_topics:
+                    topic_id = topic["id"]
+                    if _past_watermark(topic_id, known_ids):
+                        if str(topic_id) in known_ids and _topic_was_bumped(topic):
+                            if topic_id not in seen_ids:
+                                seen_ids.add(topic_id)
+                                topic_refs.append((cat_id, cat_slug, topic))
+                        stop_paging = True
+                        break
+                    if topic_id in seen_ids:
+                        continue
+                    seen_ids.add(topic_id)
+                    topic_refs.append((cat_id, cat_slug, topic))
 
                 logger.debug("TE %s page %d: %d topics", cat_slug, page, len(page_topics))
+                if stop_paging:
+                    break
 
-        return topics
+        return topic_refs
 
     async def _search_topics(
-        self, client: HttpFetcher, keywords: list[str], max_pages: int
-    ) -> list[dict]:
-        """Search classifieds using Discourse search API."""
-        topics: list[dict] = []
-        for keyword in keywords[:5]:  # limit to 5 keywords
-            query = f"{keyword} category:{DEFAULT_CATEGORY_ID}"
-            resp = await client.get(
-                f"{BASE_URL}/search.json",
-                params={"q": query},
-                host_min_interval=self._request_delay,
-            )
-            if resp is None or resp.status_code != 200:
-                logger.warning("TE search for '%s' failed", keyword)
-                continue
-
-            data = resp.json()
-            for topic in data.get("topics", []):
-                topics.append(topic)
-
-        # Deduplicate by topic ID
+        self,
+        client: HttpFetcher,
+        keywords: list[str],
+        max_pages: int,
+        known_ids: set[str],
+    ) -> list[tuple[int, str, dict]]:
+        """Search classifieds using Discourse search API with paging."""
+        topic_refs: list[tuple[int, str, dict]] = []
         seen_ids: set[int] = set()
-        unique: list[dict] = []
-        for t in topics:
-            if t["id"] not in seen_ids:
-                seen_ids.add(t["id"])
-                unique.append(t)
-        return unique[:max_pages * 30]  # reasonable cap
+
+        for keyword in keywords[:5]:
+            query = f"{keyword} category:{DEFAULT_CATEGORY_ID}"
+            for page in range(max_pages):
+                resp = await client.get(
+                    f"{BASE_URL}/search.json",
+                    params={"q": query, "page": page},
+                    host_min_interval=self._request_delay,
+                )
+                if resp.status == "exhausted":
+                    self.list_fetch_exhausted = True
+                    logger.warning("TE search for '%s' page %d exhausted retries", keyword, page)
+                    break
+                if resp.status != "success":
+                    logger.warning("TE search for '%s' page %d failed", keyword, page)
+                    break
+
+                data = resp.json()
+                page_topics = data.get("topics", [])
+                if not page_topics:
+                    break
+
+                stop_paging = False
+                for topic in page_topics:
+                    topic_id = topic["id"]
+                    if _past_watermark(topic_id, known_ids):
+                        if str(topic_id) in known_ids and _topic_was_bumped(topic):
+                            if topic_id not in seen_ids:
+                                seen_ids.add(topic_id)
+                                topic_refs.append((DEFAULT_CATEGORY_ID, "classifieds", topic))
+                        stop_paging = True
+                        break
+                    if topic_id in seen_ids:
+                        continue
+                    seen_ids.add(topic_id)
+                    topic_refs.append((DEFAULT_CATEGORY_ID, "classifieds", topic))
+
+                if stop_paging:
+                    break
+
+        return topic_refs
 
     async def _fetch_topic_detail(
-        self, client: HttpFetcher, topic_summary: dict
+        self,
+        client: HttpFetcher,
+        topic_summary: dict,
+        cat_id: int,
+        cat_slug: str,
     ) -> Listing | None:
         """Fetch full topic and build a Listing."""
         topic_id = topic_summary["id"]
-        resp = await client.get(f"{BASE_URL}/t/{topic_id}.json")
-        if resp is None:
-            logger.debug("TE topic %d failed", topic_id)
-            return None
-        if resp.status_code != 200:
-            logger.debug("TE topic %d returned %d", topic_id, resp.status_code)
+        resp = await client.get(
+            f"{BASE_URL}/t/{topic_id}.json",
+            host_min_interval=self._request_delay,
+        )
+        if resp.status != "success":
+            logger.debug("TE topic %d fetch failed (%s)", topic_id, resp.status)
             return None
 
         data = resp.json()
@@ -147,7 +232,7 @@ class TechEnclaveScraper(BaseScraper):
         first_post = posts[0]
         body_html = first_post.get("cooked", "")
         body_text = strip_html(body_html)
-        title = data.get("title", "")
+        title = data.get("title", topic_summary.get("title", ""))
 
         price = extract_price(body_html)
         location = extract_location(body_html)
@@ -163,6 +248,8 @@ class TechEnclaveScraper(BaseScraper):
         slug = data.get("slug", "")
         url = f"{BASE_URL}/t/{slug}/{topic_id}"
 
+        intent = classify_intent(title, body_text, category_hint=cat_slug)
+
         return Listing(
             source="techenclave",
             source_id=str(topic_id),
@@ -174,4 +261,5 @@ class TechEnclaveScraper(BaseScraper):
             location=location,
             seller_name=first_post.get("username", ""),
             posted_at=posted_at,
+            category=intent,
         )
