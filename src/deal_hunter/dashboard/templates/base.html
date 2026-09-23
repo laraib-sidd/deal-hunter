@@ -54,7 +54,7 @@
       border-bottom:1px solid var(--border-soft);
     }
     .brand { display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em; }
-    .brand .mark { width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,var(--accent-hi),var(--accent)); display:grid; place-items:center; font-size:12px; }
+    .brand .mark { width:22px; height:22px; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); display:grid; place-items:center; font-size:12px; color:var(--text-2); }
     .topnav { display:flex; gap:2px; }
     .topnav a {
       color:var(--text-3); text-decoration:none; font-size:13px; font-weight:500;
@@ -69,7 +69,14 @@
       font-size:12px; color:var(--text-3); padding:4px 10px;
       border:1px solid var(--border); border-radius:9999px; background:var(--surface);
     }
-    .live-dot { width:6px; height:6px; border-radius:50%; background:var(--deal-buy); box-shadow:0 0 0 3px rgba(39,166,68,.18); }
+    .live-dot { width:6px; height:6px; border-radius:50%; }
+    .live-pill.live-ok { color:var(--text-2); border-color:rgba(39,166,68,.25); }
+    .live-pill.live-ok .live-dot { background:var(--deal-buy); box-shadow:0 0 0 3px rgba(39,166,68,.18); animation:live-pulse 2s ease-in-out 3; }
+    .live-pill.live-stale { color:var(--deal-negotiate); border-color:rgba(232,163,61,.25); }
+    .live-pill.live-stale .live-dot { background:var(--deal-negotiate); box-shadow:0 0 0 3px rgba(232,163,61,.18); }
+    .live-pill.live-off { color:var(--text-4); }
+    .live-pill.live-off .live-dot { background:var(--text-4); box-shadow:none; }
+    @keyframes live-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
 
     /* ---------- layout ---------- */
     .shell { max-width:1280px; margin:0 auto; padding:24px; }
@@ -213,7 +220,7 @@
     </nav>
     <div class="spacer"></div>
     <div class="top-actions">
-      <span class="live-pill"><span class="live-dot"></span> LIVE</span>
+      <span class="live-pill {{ live_status.cls }}"><span class="live-dot"></span> {{ live_status.label }}</span>
     </div>
   </div>
 

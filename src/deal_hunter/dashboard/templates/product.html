@@ -6,7 +6,14 @@
   <span class="lede">{{ listings|length }} offers tracked</span>
 </div>
 
-<!-- Live market stat cards -->
+{% if price_history %}
+<section class="card" style="margin:18px 0;padding:16px">
+  <div class="section-title" style="margin-bottom:10px"><span>Price history</span><span class="faint">last {{ price_history|length }} obs</span></div>
+  {{ sparkline_svg(price_history, market.median if market else none) }}
+  {% if market and market.median %}<div class="faint" style="font-size:11px;margin-top:6px">— median {{ fmt_inr(market.median) }}</div>{% endif %}
+</section>
+{% endif %}
+
 <div class="cards" style="margin:18px 0">
   <div class="card"><div class="lbl">Median asking</div><div class="num">{{ fmt_inr(market.median) if market else "—" }}</div></div>
   <div class="card"><div class="lbl">25th pct</div><div class="num">{{ fmt_inr(market.p25) if market else "—" }}</div></div>
@@ -15,13 +22,12 @@
 </div>
 
 {% if not market or not market.median %}
-<div class="banner info">Live baseline needs ≥3 recent price observations. Run <code class="mono">deal-hunter deals</code> to build it.</div>
+<div class="banner info">Live baseline needs ≥3 recent price observations.</div>
 {% endif %}
 
-<!-- Price history sparkline + offers -->
 <div class="grid grid-main" style="margin-top:8px">
   <section class="stack">
-    <div class="section-title"><span>Offer history</span></div>
+    <div class="section-title"><span>Current offers</span></div>
     <div class="table-wrap">
       <table class="tbl">
         <thead><tr><th>Asking</th><th>Source</th><th>Verdict</th><th>Score</th><th>Seller</th><th>Status</th><th>Posted</th></tr></thead>
@@ -43,7 +49,6 @@
   </section>
 
   <div class="stack">
-    <!-- Seller risk strip -->
     <section class="stack">
       <div class="section-title"><span>Sellers</span></div>
       {% for s in sellers %}
@@ -58,9 +63,4 @@
     </section>
   </div>
 </div>
-
-<style>
-  .grid2 { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
-  @media(max-width:960px){ .grid2{grid-template-columns:1fr} }
-</style>
 {% endblock %}

@@ -1,29 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Deals · Deal Hunter{% endblock %}
 {% block content %}
-<div class="section-title"><span>Deals</span><span class="faint">{{ deals|length }} priced</span></div>
+<div class="section-title"><span>Deals</span><span class="faint">{% if deals %}{{ deals|length }} scored{% else %}shortlist{% endif %}</span></div>
 
-<!-- Sticky-ish filter bar -->
-<div class="filterbar">
-  <input class="search-input" type="search" placeholder="Filter by product name…" oninput="filterDeals(this.value.toLowerCase())">
-  <select id="f-src" onchange="filterSrc(this.value)">
+<form class="filterbar" method="get" action="/deals">
+  <input class="search-input" type="search" name="q" placeholder="Filter by product name…" value="{{ filter_q }}">
+  <select name="source">
     <option value="">All sources</option>
-    {% for s, _ in sources %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    {% for s, _ in sources %}
+    <option value="{{ s }}" {% if filter_source == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
   </select>
-  <select id="f-verdict" onchange="filterVerdict(this.value)">
+  <select name="verdict">
     <option value="">Any verdict</option>
-    <option value="BUY">Buy</option>
-    <option value="NEGOTIATE">Negotiate</option>
-    <option value="PASS">Pass</option>
-    <option value="SCAM_RISK">Scam risk</option>
+    <option value="BUY" {% if filter_verdict == 'BUY' %}selected{% endif %}>Buy</option>
+    <option value="NEGOTIATE" {% if filter_verdict == 'NEGOTIATE' %}selected{% endif %}>Negotiate</option>
+    <option value="PASS" {% if filter_verdict == 'PASS' %}selected{% endif %}>Pass</option>
+    <option value="SCAM_RISK" {% if filter_verdict == 'SCAM_RISK' %}selected{% endif %}>Scam risk</option>
   </select>
-  <span class="spacer-m"></span>
-  <button class="btn btn-sm" onclick="resetFilters()">Reset</button>
-</div>
+  <button class="btn btn-sm" type="submit">Apply</button>
+  <a class="btn btn-sm" href="/deals">Reset</a>
+</form>
 
-<div class="stack" id="deal-list" style="gap:10px">
+{% if empty_state == 'no_priced' %}
+<div class="empty"><div class="ic">◌</div><p>No priced listings yet.</p><p class="hint">Run <code class="mono">deal-hunter scrape</code> to ingest offers with prices.</p></div>
+{% elif empty_state == 'no_scored' %}
+<div class="empty"><div class="ic">◌</div><p>No deals scored at or above 6 yet.</p><p class="hint">Listings exist, but scoring has not been written onto these rows yet.</p></div>
+{% elif deals %}
+<div class="stack" style="gap:10px">
   {% for l, delta_label, delta_cls in deals %}
-  <div class="deal-card" data-title="{{ (l.title or '').lower() }}" data-src="{{ l.source }}" data-verdict="{{ l.deal_verdict or '' }}">
+  <div class="deal-card">
     <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:220px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -31,31 +37,32 @@
           {% if l.canonical_name %}
             <a class="link" href="/product/{{ l.canonical_name }}" style="font-size:15px;font-weight:500">{{ l.canonical_name }}</a>
           {% else %}
-            <a class="link" href="{{ l.url }}" target="_blank" rel="noopener" style="font-size:14px">{{ l.title[:56] }}</a>
+            <span style="font-size:14px;font-weight:500">{{ l.title[:56] }}</span>
           {% endif %}
         </div>
         <div style="margin-top:5px;font-size:12px;color:var(--text-3)">
-          <span class="source-pill running"><span class="dot"></span>{{ l.source }}</span>
+          <span class="source-pill"><span class="dot"></span>{{ l.source }}</span>
           {% if l.location %}<span class="marker"> · {{ l.location }}</span>{% endif %}
-          {% if l.seller_name %}<span class="marker"> · {{ l.seller_name }}</span>{% endif %}
-          <span class="marker"> · {{ fmt_dt(l.scraped_at) }}</span>
+          <span class="marker"> · {{ relative_time(l.last_confirmed_at or l.scraped_at) }}</span>
         </div>
       </div>
       <div style="text-align:right;min-width:150px">
         <div class="mono" style="font-size:20px;font-weight:500">{{ fmt_inr(l.price) }}</div>
-        <div class="delta {{ delta_cls }}" style="justify-content:flex-end">{{ "▲" if delta_cls=='delta-good' else ("▼" if delta_cls=='delta-bad' else "↔") }} {{ row_label if row_label is defined else delta_label if delta_label is defined else "" }}</div>
+        <div class="delta {{ delta_cls }}" style="justify-content:flex-end">
+          {% if delta_cls == 'delta-good' %}↓{% elif delta_cls == 'delta-bad' %}↑{% else %}↔{% endif %}
+          {{ delta_label }}
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:120px">
-        <div class="mono" style="font-size:13px">{{ score_display(l.deal_score) }}</div>
+        <div class="mono" style="font-size:13px">{{ score_display(l.deal_score) }} <span class="faint">{{ l.deal_score }}/10</span></div>
         <a class="btn btn-sm" href="{{ l.url }}" target="_blank" rel="noopener">Open →</a>
       </div>
     </div>
   </div>
   {% endfor %}
 </div>
-
-{% if not deals %}
-<div class="empty"><div class="ic">◌</div><p>No priced listings yet.</p><p class="hint">Run <code class="mono">deal-hunter scrape</code> then <code class="mono">deals</code>.</p></div>
+{% else %}
+<div class="empty"><div class="ic">◌</div><p>No deals match these filters.</p><p class="hint">Try a different source, verdict, or search term.</p></div>
 {% endif %}
 
 <style>
@@ -64,23 +71,5 @@
     transition:background .12s, border-color .12s;
   }
   .deal-card:hover { background:var(--surface-2); border-color:var(--border-strong); }
-  .spacer { flex:1; }
 </style>
-
-<script>
-function filterDeals(q){ document.querySelectorAll('.deal-card').forEach(c=>{
-  c.style.display = c.dataset.title.includes(q) ? '' : 'none';
-});}
-function filterSrc(v){ document.querySelectorAll('.deal-card').forEach(c=>{
-  c.style.display = (!v || c.dataset.src===v) ? '' : 'none';
-});}
-function filterVerdict(v){ document.querySelectorAll('.deal-card').forEach(c=>{
-  c.style.display = (!v || c.dataset.verdict===v) ? '' : 'none';
-});}
-function resetFilters(){
-  document.querySelector('.search-input').value='';
-  document.querySelectorAll('#f-src,#f-verdict').forEach(s=>s.value='');
-  document.querySelectorAll('.deal-card').forEach(c=>c.style.display='');
-}
-</script>
 {% endblock %}

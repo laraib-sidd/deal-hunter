@@ -99,3 +99,77 @@ def fmt_inr(price: float | None) -> str:
 
 def fmt_dt(dt, fmt="%d %b %H:%M"):
     return dt.strftime(fmt) if dt else "—"
+
+def relative_time(dt) -> str:
+    """Human-readable age for listing timestamps."""
+    if not dt:
+        return "—"
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    secs = int((now - dt).total_seconds())
+    if secs < 60:
+        return "just now"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 7:
+        return f"{days}d ago"
+    return dt.strftime("%d %b")
+
+
+def live_run_status(last: dict | None) -> dict:
+    """Map last_run_summary to LIVE / STALE / OFF pill state."""
+    from datetime import UTC, datetime, timedelta
+
+    if last is None:
+        return {"label": "OFF", "cls": "live-off", "pulse": False}
+    started = last["started_at"]
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=UTC)
+    age = datetime.now(UTC) - started
+    if age < timedelta(hours=3):
+        return {"label": "LIVE", "cls": "live-ok", "pulse": True}
+    return {"label": "STALE", "cls": "live-stale", "pulse": False}
+
+
+def sparkline_svg(history, median: float | None, width: int = 320, height: int = 80) -> Markup:
+    """Inline SVG polyline for price history with optional median guide."""
+    if not history:
+        return Markup("")
+    points = list(reversed(history))
+    prices = [p.price for p in points]
+    if len(prices) < 2:
+        return Markup("")
+    lo = min(prices)
+    hi = max(prices)
+    if median is not None:
+        lo = min(lo, median)
+        hi = max(hi, median)
+    span = hi - lo or 1.0
+    pad = 6
+    coords: list[str] = []
+    for i, price in enumerate(prices):
+        x = pad + (i / (len(prices) - 1)) * (width - 2 * pad)
+        y = height - pad - ((price - lo) / span) * (height - 2 * pad)
+        coords.append(f"{x:.1f},{y:.1f}")
+    median_line = ""
+    if median is not None:
+        my = height - pad - ((median - lo) / span) * (height - 2 * pad)
+        median_line = (
+            f'<line x1="{pad}" y1="{my:.1f}" x2="{width - pad}" y2="{my:.1f}" '
+            f'stroke="var(--text-4)" stroke-width="1" stroke-dasharray="4 3"/>'
+        )
+    return Markup(
+        f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
+        f'preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">'
+        f'{median_line}'
+        f'<polyline fill="none" stroke="var(--accent-hi)" stroke-width="1.5" '
+        f'points="{" ".join(coords)}"/></svg>'
+    )

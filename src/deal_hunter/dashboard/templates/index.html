@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<!-- Hero stat cards -->
 <div class="cards">
-  <div class="card"><div class="lbl">New / 24h</div><div class="num">{{ overview.scraped_24h }}</div><div class="delta-line"><span class="delta delta-good">↓ live scan</span></div></div>
+  <div class="card"><div class="lbl">New / 24h</div><div class="num">{{ overview.scraped_24h }}</div><div class="delta-line"><span class="faint">recent ingest</span></div></div>
   <div class="card"><div class="lbl">Active listings</div><div class="num">{{ overview.active }}</div><div class="delta-line"><span class="faint">tracked</span></div></div>
-  <div class="card accent-border"><div class="lbl">Deals <span class="faint">score≥6</span></div><div class="num sig-buy">{{ overview.active_deals }}</div><div class="delta-line"><span class="delta delta-good">▲ buy signals</span></div></div>
-  <div class="card"><div class="lbl">Sellers</div><div class="num">{{ overview.sellers }}</div><div class="delta-line"><span class="faint">tracked</span></div></div>
+  <div class="card accent-border"><div class="lbl">Deals <span class="faint">score≥6</span></div><div class="num sig-buy">{{ overview.active_deals }}</div>
+    <div class="delta-line">{% if overview.active_deals > 0 %}<span class="delta delta-good">▲ buy signals</span>{% else %}<span class="faint">no buy signals yet</span>{% endif %}</div>
+  </div>
   <div class="card"><div class="lbl">Active watches</div><div class="num">{{ overview.watches }}</div><div class="delta-line"><span class="faint">{{ overview.watch_hits }} hits</span></div></div>
 </div>
 
@@ -14,7 +14,6 @@
 {% endif %}
 
 <div class="grid grid-main" style="margin-top:20px">
-  <!-- Latest listings -->
   <section class="stack">
     <div class="section-title"><span>Latest listings</span></div>
     <div class="table-wrap">
@@ -39,7 +38,6 @@
     </div>
   </section>
 
-  <!-- Right rail -->
   <div class="stack">
     <section class="stack">
       <div class="section-title"><span>Market pulse</span></div>

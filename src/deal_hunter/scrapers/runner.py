@@ -9,6 +9,7 @@ Also contains a per-source circuit breaker so a source that keeps failing is ope
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Callable
@@ -16,8 +17,9 @@ from datetime import UTC, datetime
 
 from deal_hunter.config import AppConfig
 from deal_hunter.db.models import Listing
-from deal_hunter.db.repo_meta import new_run_id
+from deal_hunter.db.repo_meta import advance_cursors, load_known_ids, new_run_id
 from deal_hunter.scrapers.base import BaseScraper
+from deal_hunter.scrapers.http import fetch_was_exhausted, reset_fetch_exhausted
 from deal_hunter.scrapers.reddit import RedditScraper
 from deal_hunter.scrapers.techenclave import TechEnclaveScraper
 
@@ -115,15 +117,32 @@ async def run_scrapers(
             meta["circuit_state"] = "open"
             return [], meta
         async with sem:
+            scrape_kwargs: dict = {"keywords": keywords, "max_pages": max_pages}
+            if engine is not None:
+                known_ids = load_known_ids(engine, source)
+                if "known_ids" in inspect.signature(scraper.scrape).parameters:
+                    scrape_kwargs["known_ids"] = known_ids or None
+            reset_fetch_exhausted()
             try:
-                result = await scraper.scrape(keywords=keywords, max_pages=max_pages)
+                result = await scraper.scrape(**scrape_kwargs)
             except Exception as exc:  # noqa: BLE001 - fail fast, never crash the run
                 breaker.record_failure(source)
                 logger.error("[%s] Scraper failed: %s", source, exc)
                 meta["failed"] = True
                 meta["circuit_state"] = "tripped"
                 return [], meta
+            if fetch_was_exhausted():
+                state = breaker.record_failure(source)
+                meta["failed"] = True
+                meta["circuit_state"] = state
+                logger.error("[%s] List fetch exhausted retries", source)
+                return [], meta
             breaker.record_success(source)
+            if engine is not None and result is not None:
+                try:
+                    advance_cursors(engine, source, result)
+                except Exception:  # pragma: no cover
+                    logger.exception("[%s] Failed to advance scrape cursors", source)
             logger.info("[%s] Returned %d listings", source, len(result))
             meta["scraped"] = len(result)
             meta["duration_ms"] = int((time.monotonic() - start) * 1000)

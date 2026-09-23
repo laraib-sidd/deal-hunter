@@ -12,6 +12,10 @@ import os
 import ssl
 import time
 from collections import defaultdict
+from collections.abc import Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass
+from typing import Any, Literal
 
 import httpx
 
@@ -20,6 +24,52 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 15.0
 DEFAULT_RETRIES = 3
 BASE_BACKOFF = 2.0  # seconds
+MAX_BACKOFF = 30.0
+
+FetchStatus = Literal["success", "not_found", "exhausted"]
+
+_fetch_exhausted: ContextVar[bool] = ContextVar("fetch_exhausted", default=False)
+
+
+def reset_fetch_exhausted() -> None:
+    """Clear the per-scrape exhaustion flag before a scraper run."""
+    _fetch_exhausted.set(False)
+
+
+def fetch_was_exhausted() -> bool:
+    """Whether any ``HttpFetcher.get()`` in this context returned exhausted."""
+    return _fetch_exhausted.get()
+
+
+@dataclass(frozen=True, slots=True)
+class FetchResult:
+    """Outcome of a GET — drop-in for legacy ``resp.status_code`` / ``resp.json()``."""
+
+    status: FetchStatus
+    response: httpx.Response | None = None
+
+    @property
+    def status_code(self) -> int:
+        if self.response is not None:
+            return self.response.status_code
+        return 0
+
+    @property
+    def text(self) -> str:
+        if self.response is not None:
+            return self.response.text
+        return ""
+
+    @property
+    def headers(self) -> Mapping[str, str]:
+        if self.response is not None:
+            return self.response.headers
+        return {}
+
+    def json(self) -> Any:
+        if self.response is not None:
+            return self.response.json()
+        return {}
 
 
 def _tls_context(netskope_ca: str = "/private/etc/netskope/netskope-cert-bundle.pem") -> ssl.SSLContext | bool:
@@ -28,6 +78,16 @@ def _tls_context(netskope_ca: str = "/private/etc/netskope/netskope-cert-bundle.
         ctx = ssl.create_default_context(cafile=netskope_ca)
         return ctx
     return True
+
+
+def _parse_retry_after(value: str | None, attempt: int, base_backoff: float) -> float:
+    """Honor Retry-After only when it is delta-seconds; else exponential backoff."""
+    if not value:
+        return base_backoff * (2**attempt)
+    try:
+        return float(value)
+    except ValueError:
+        return base_backoff * (2**attempt)
 
 
 class HttpFetcher:
@@ -52,13 +112,16 @@ class HttpFetcher:
         self._base_backoff = base_backoff
         self._headers = headers or {"User-Agent": "DealHunter/0.1 (personal research tool)"}
         self._sem = asyncio.Semaphore(max_concurrent)
-        # per-host: when the last request for that host completed (rate limiting)
         self._last_request: dict[str, float] = defaultdict(float)
+        self._host_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        ca_path = netskope_ca or "/private/etc/netskope/netskope-cert-bundle.pem"
         self._client = httpx.AsyncClient(
-            timeout=timeout,
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+            transport=httpx.AsyncHTTPTransport(retries=1),
             headers=self._headers,
             follow_redirects=follow_redirects,
-            verify=_tls_context(netskope_ca or "/private/etc/netskope/netskope-cert-bundle.pem"),
+            verify=_tls_context(ca_path),
         )
 
     async def __aenter__(self) -> HttpFetcher:
@@ -71,13 +134,15 @@ class HttpFetcher:
         await self._client.aclose()
 
     async def _throttle(self, host: str, min_interval: float) -> None:
-        """Rate-limit requests to a single host (respect 'retry-after'/courtesy delay)."""
+        """Rate-limit requests to a single host (race-free under concurrent callers)."""
         if min_interval <= 0:
             return
-        wait = self._last_request[host] + min_interval - time.monotonic()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_request[host] = time.monotonic()
+        lock = self._host_locks[host]
+        async with lock:
+            wait = self._last_request[host] + min_interval - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_request[host] = time.monotonic()
 
     async def get(
         self,
@@ -86,11 +151,11 @@ class HttpFetcher:
         params: dict | None = None,
         host_min_interval: float = 0.0,
         retry_on: tuple[int, ...] = (429, 500, 502, 503, 504),
-    ) -> httpx.Response | None:
+    ) -> FetchResult:
         """GET with concurrency gate, per-host rate limit, and retry/backoff.
 
-        Returns the response for 2xx (and non-retryable codes like 404), or None after
-        exhausting retries. Never raises on transient errors.
+        Returns success (2xx), not_found (404), or exhausted after retries.
+        Never raises on transient errors.
         """
         host = httpx.URL(url).host
         async with self._sem:
@@ -101,24 +166,33 @@ class HttpFetcher:
                 except (httpx.HTTPError, httpx.TimeoutException) as exc:
                     logger.debug("GET %s error (attempt %d): %s", url, attempt + 1, exc)
                     if attempt < self._max_retries:
-                        await asyncio.sleep(self._base_backoff * (2 ** attempt))
+                        await asyncio.sleep(min(self._base_backoff * (2**attempt), MAX_BACKOFF))
                         continue
-                    return None
+                    _fetch_exhausted.set(True)
+                    return FetchResult(status="exhausted")
+
+                if resp.status_code == 404:
+                    return FetchResult(status="not_found", response=resp)
 
                 if resp.status_code in retry_on:
-                    retry_after = resp.headers.get("retry-after")
-                    delay = float(retry_after) if retry_after else self._base_backoff * (2 ** attempt)
+                    delay = _parse_retry_after(
+                        resp.headers.get("retry-after"), attempt, self._base_backoff
+                    )
                     logger.info("GET %s -> %d, backoff %.1fs", url, resp.status_code, delay)
                     if attempt < self._max_retries:
-                        await asyncio.sleep(min(delay, 30))
+                        await asyncio.sleep(min(delay, MAX_BACKOFF))
                         continue
-                    return None
+                    _fetch_exhausted.set(True)
+                    return FetchResult(status="exhausted")
 
-                return resp
+                return FetchResult(status="success", response=resp)
 
-            return None
+            _fetch_exhausted.set(True)
+            return FetchResult(status="exhausted")
 
     async def fetch_text(self, url: str, **kwargs) -> str | None:
         """Convenience: GET and return response text, or None on failure."""
-        resp = await self.get(url, **kwargs)
-        return resp.text if resp is not None else None
+        result = await self.get(url, **kwargs)
+        if result.status == "success" and result.response is not None:
+            return result.response.text
+        return None

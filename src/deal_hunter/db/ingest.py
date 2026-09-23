@@ -6,15 +6,20 @@ watch-matching and alerts).
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, select
 
-from deal_hunter.db.models import Listing, Seller
+from deal_hunter.analysis.schemas import DealAnalysis
+from deal_hunter.db.models import Listing, PriceSnapshot, Seller
+from deal_hunter.db.repo_prices import record_prices
 
 logger = logging.getLogger(__name__)
+
+_STALE_AFTER_DAYS = 21
 
 
 def _now() -> datetime:
@@ -28,6 +33,7 @@ class IngestionResult:
     new: list[Listing] = field(default_factory=list)
     seen: list[Listing] = field(default_factory=list)  # known, still active
     reactivated: list[Listing] = field(default_factory=list)  # was dead, re-listed
+    price_drops: list[tuple[Listing, float, float]] = field(default_factory=list)
     duplicate_exact: int = 0  # duplicate (source, source_id) within this same batch
 
     @property
@@ -44,6 +50,62 @@ def _seller_key(source: str, listing: Listing) -> tuple[str, str] | None:
     return source, who.lower()
 
 
+def _price_snapshot(listing: Listing, price: float) -> PriceSnapshot:
+    return PriceSnapshot(
+        canonical_name=listing.canonical_name or listing.title,
+        category=listing.category,
+        source=listing.source,
+        price=price,
+        listing_url=listing.url,
+        location=listing.location,
+    )
+
+
+def persist_scores(engine, rows: list[tuple[int, DealAnalysis]]) -> None:
+    """Write deal analysis fields onto listing rows in one transaction."""
+    with Session(engine) as session:
+        for listing_id, analysis in rows:
+            listing = session.get(Listing, listing_id)
+            if listing is None:
+                continue
+            listing.deal_score = float(analysis.deal_score)
+            listing.deal_verdict = analysis.verdict
+            listing.deal_reason = analysis.reasoning
+            listing.canonical_name = analysis.canonical_name
+            listing.red_flags_json = json.dumps([f.model_dump() for f in analysis.red_flags])
+        session.commit()
+
+
+def mark_alerted(engine, listing_ids: list[int]) -> None:
+    """Set alerted_at on listings that were sent to Telegram."""
+    if not listing_ids:
+        return
+    now = _now()
+    with Session(engine) as session:
+        for listing_id in listing_ids:
+            listing = session.get(Listing, listing_id)
+            if listing is not None:
+                listing.alerted_at = now
+        session.commit()
+
+
+def mark_stale(engine, now: datetime) -> int:
+    """Mark active listings older than 21 days as stale (time-based only)."""
+    cutoff = now - timedelta(days=_STALE_AFTER_DAYS)
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Listing).where(
+                Listing.status == "active",
+                Listing.posted_at.is_not(None),  # type: ignore[union-attr]
+                Listing.posted_at < cutoff,  # type: ignore[operator]
+            )
+        ).all()
+        for listing in rows:
+            listing.status = "stale"
+        session.commit()
+        return len(rows)
+
+
 class IngestionService:
     """Writes listings + sellers; returns the delta for downstream alerting."""
 
@@ -53,6 +115,7 @@ class IngestionService:
     def ingest_batch(self, listings: list[Listing]) -> IngestionResult:
         result = IngestionResult()
         now = _now()
+        snapshots: list[PriceSnapshot] = []
 
         # (source, source_key) -> Seller row currently in this session
         sellers: dict[tuple[str, str], Seller] = {}
@@ -96,7 +159,11 @@ class IngestionService:
                     existing.times_seen += 1
                     existing.last_confirmed_at = now
                     if listing.price is not None and existing.price != listing.price:
-                        existing.price = listing.price  # reflect price drops
+                        old_price = existing.price
+                        existing.price = listing.price
+                        snapshots.append(_price_snapshot(existing, listing.price))
+                        if old_price is not None and listing.price < old_price:
+                            result.price_drops.append((existing, old_price, listing.price))
                     if existing.status == "dead":
                         existing.status = "active"
                         result.reactivated.append(existing)
@@ -115,8 +182,15 @@ class IngestionService:
 
             session.commit()
 
+        if snapshots:
+            record_prices(self._engine, snapshots)
+
         logger.info(
-            "Ingested: %d new, %d seen, %d reactivated, %d dup",
-            len(result.new), len(result.seen), len(result.reactivated), result.duplicate_exact,
+            "Ingested: %d new, %d seen, %d reactivated, %d price drops, %d dup",
+            len(result.new),
+            len(result.seen),
+            len(result.reactivated),
+            len(result.price_drops),
+            result.duplicate_exact,
         )
         return result
