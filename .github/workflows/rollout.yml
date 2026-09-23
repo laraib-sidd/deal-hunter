@@ -1,0 +1,44 @@
+name: Rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Git commit SHA to deploy
+        required: false
+        type: string
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          IMAGE_TAG: ${{ github.event.inputs.sha || github.sha }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "rollout skipped: secrets not set"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          ssh -o StrictHostKeyChecking=no root@"$VPS_HOST" "
+            set -euo pipefail
+            cd /opt/deal-hunter
+            if grep -q '^DEAL_HUNTER_IMAGE_TAG=' .env 2>/dev/null; then
+              sed -i \"s/^DEAL_HUNTER_IMAGE_TAG=.*/DEAL_HUNTER_IMAGE_TAG=${IMAGE_TAG}/\" .env
+            else
+              printf 'DEAL_HUNTER_IMAGE_TAG=%s\n' '${IMAGE_TAG}' >> .env
+            fi
+            if [ ! -f .volume-chowned ]; then
+              docker run --rm -v deal-hunter_deal-hunter-data:/data alpine chown -R 1000:1000 /data
+              touch .volume-chowned
+            fi
+            docker compose pull
+            docker compose up -d web
+          "
