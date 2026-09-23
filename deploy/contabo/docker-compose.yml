@@ -6,13 +6,12 @@ services:
     env_file: .env
     volumes:
       - deal-hunter-data:/data
-    # Default entrypoint runs the full pipeline: scrape -> score -> notify
+    # Default entrypoint runs the full pipeline in one process
     entrypoint: ["sh", "-c"]
     command:
       - |
         echo "[$(date)] Starting deal-hunter run..."
-        deal-hunter scrape && \
-        deal-hunter deals --ai --min-score 5 --notify && \
+        deal-hunter run --ai --min-score 6 --notify && \
         echo "[$(date)] Run complete."
 
   # Watchtower for auto-deploy (reuses the one from sidekick if already running)
