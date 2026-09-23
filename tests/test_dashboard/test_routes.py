@@ -1,7 +1,7 @@
 """Tests for dashboard routes (FastAPI TestClient) + marketplace filters."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -174,9 +174,50 @@ class TestDashboardRoutes:
         assert r.status_code == 200
         assert "RTX 3080" in r.text
 
-    def test_health_200(self, client: TestClient) -> None:
+    def test_health_503_without_run(self, client: TestClient) -> None:
+        r = client.get("/health")
+        assert r.status_code == 503
+        assert "last_run: none yet" in r.text
+
+    def test_health_503_stale_run(self, client: TestClient, tmp_path) -> None:
+        engine = get_engine(tmp_path / "dash.db")
+        log_run(
+            engine,
+            {
+                "run_id": "stale1",
+                "source": "all",
+                "scraped": 1,
+                "new": 0,
+                "scored": 1,
+                "failed": False,
+                "duration_ms": 100,
+                "circuit_state": "closed",
+                "started_at": datetime.now(UTC) - timedelta(hours=4),
+            },
+        )
+        r = client.get("/health")
+        assert r.status_code == 503
+        assert "last_run: all" in r.text
+
+    def test_health_200_recent_run(self, client: TestClient, tmp_path) -> None:
+        engine = get_engine(tmp_path / "dash.db")
+        log_run(
+            engine,
+            {
+                "run_id": "fresh1",
+                "source": "all",
+                "scraped": 2,
+                "new": 1,
+                "scored": 1,
+                "failed": False,
+                "duration_ms": 200,
+                "circuit_state": "closed",
+                "started_at": datetime.now(UTC),
+            },
+        )
         r = client.get("/health")
         assert r.status_code == 200
+        assert "last_run: all" in r.text
 
     def test_unknown_product_404(self, client: TestClient) -> None:
         r = client.get("/product/definitely-not-a-real-product-xyz")
