@@ -14,6 +14,7 @@ services:
       - 0.0.0.0
       - --port
       - "8001"
+    entrypoint: []
     ports:
       - 127.0.0.1:8001:8001
     healthcheck:
