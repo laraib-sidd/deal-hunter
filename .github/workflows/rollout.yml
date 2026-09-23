@@ -12,6 +12,9 @@ jobs:
   rollout:
     runs-on: ubuntu-latest
     environment: vps
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -107,6 +110,7 @@ jobs:
           REMOTE_CRON
 
           echo "pulling image and starting web"
+          printf '%s\n' "$GITHUB_TOKEN" | ssh "${SSH_OPTS[@]}" "$TARGET" "docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin" >/dev/null
           ssh "${SSH_OPTS[@]}" "$TARGET" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$REMOTE_DIR"
@@ -116,4 +120,5 @@ jobs:
           fi
           docker compose pull
           docker compose up -d web
+          docker logout ghcr.io >/dev/null
           REMOTE
