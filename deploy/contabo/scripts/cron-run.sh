@@ -6,7 +6,7 @@ cd /opt/deal-hunter
 
 echo "=== [$(date)] deal-hunter cron start ==="
 
-# Run scrape + score + notify in a fresh container
+# Run scrape + ingest + score + notify in a fresh container
 docker compose up --abort-on-container-exit 2>&1
 
 echo "=== [$(date)] deal-hunter cron end ==="

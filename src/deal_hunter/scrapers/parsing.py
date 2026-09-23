@@ -97,3 +97,56 @@ def extract_location(text: str) -> str | None:
             return city.title()
 
     return None
+
+# --- intent / spam classification (canonical; reddit.py copies removed in slice C) ---
+
+_WTB_PATTERNS = re.compile(
+    r"(?:"
+    r"\b(?:wtb|want\s+to\s+buy|buying|looking\s+for|need\s+(?:a|an|to\s+buy))\b"
+    r"|\[wtb\]|\[w\]"
+    r")",
+    re.IGNORECASE,
+)
+
+_COUPON_PATTERNS = re.compile(
+    r"\b(?:coupon|promo\s*code|discount|cashback|voucher|off|save|free|loot|"
+    r"flight|ticket|hotel|booking|travel|makemytrip|easemytrip|cleartrip|"
+    r"irctc|indigo|spicejet|airindia|goibibo|yatra|mmt)\b",
+    re.IGNORECASE,
+)
+
+_SPAM_PATTERNS = re.compile(
+    r"(?:\b\d{1,3}(?:%|\s)?\s*upi\b"
+    r"\b|\bg[i]?ft\s*card\b|\bpaytm\s*cash\b"
+    r"|amazon\s*(?:pay)?\s*gc\b|flipkart\s*gc\b"
+    r"|\b\w+\s*gc\b\s+\[w\]|\b\[w\]\s+.*?\bupi\b)",
+    re.IGNORECASE,
+)
+
+_WTB_CATEGORY_HINTS = frozenset({"wtb", "looking-to-buy", "18"})
+
+
+def is_spam_post(title: str, body: str) -> bool:
+    """True if the post is finance/trade/UPI spam, not a hardware listing."""
+    text = f"{title} {body}"
+    return bool(_SPAM_PATTERNS.search(text))
+
+
+def is_coupon_post(title: str, body: str) -> bool:
+    """True if the post is a coupon/promo/travel offer rather than a sale listing."""
+    text = f"{title} {body}"
+    return bool(_COUPON_PATTERNS.search(text))
+
+
+def classify_intent(title: str, body: str, category_hint: str | None = None) -> str:
+    """Classify listing intent as sell, wtb (want-to-buy), or other (spam/coupon/noise)."""
+    if is_spam_post(title, body) or is_coupon_post(title, body):
+        return "other"
+    hint = (category_hint or "").strip().lower()
+    if hint in _WTB_CATEGORY_HINTS:
+        return "wtb"
+    text = f"{title} {body}"
+    if _WTB_PATTERNS.search(text):
+        return "wtb"
+    return "sell"
+

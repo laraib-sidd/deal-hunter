@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 
+from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
 
 
@@ -12,6 +13,9 @@ class Listing(SQLModel, table=True):
     """A hardware listing scraped from any source."""
 
     __tablename__ = "listings"
+    __table_args__ = (
+        Index("uq_listing_source_item", "source", "source_id", unique=True),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     source: str = Field(index=True)  # "techenclave" | "reddit" | "olx"
@@ -42,11 +46,16 @@ class Listing(SQLModel, table=True):
     status: str = Field(default="active", index=True)  # active | stale | dead | suppressed
     times_seen: int = Field(default=1)
     last_confirmed_at: datetime | None = Field(default=None, index=True)
+    alerted_at: datetime | None = Field(default=None, index=True)
 
     @staticmethod
     def compute_fingerprint(title: str, price: float | None, location: str | None) -> str:
-        """Compute a dedup fingerprint from normalized fields."""
-        normalized = f"{title.lower().strip()}|{price}|{(location or '').lower().strip()}"
+        """Compute a dedup fingerprint from normalized title and location.
+
+        ``price`` is kept in the signature for backward compatibility with existing
+        call sites but is not included in the hash; offer identity is ``(source, source_id)``.
+        """
+        normalized = f"{title.lower().strip()}|{(location or '').lower().strip()}"
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 

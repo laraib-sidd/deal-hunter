@@ -24,6 +24,7 @@ _LISTING_COLUMNS: list[tuple[str, str, str | None]] = [
     ("status", "VARCHAR", "'active'"),
     ("times_seen", "INTEGER", "1"),
     ("last_confirmed_at", "DATETIME", None),
+    ("alerted_at", "DATETIME", None),
 ]
 
 
@@ -46,5 +47,15 @@ def migrate(engine) -> None:
             conn.execute(__import__("sqlalchemy").text(
                 "CREATE INDEX ix_listings_status ON listings (status)"
             ))
+
+        # Deduplicate before unique index — keep lowest id per (source, source_id).
+        conn.execute(__import__("sqlalchemy").text(
+            "DELETE FROM listings WHERE id NOT IN ("
+            "SELECT MIN(id) FROM listings GROUP BY source, source_id)"
+        ))
+        conn.execute(__import__("sqlalchemy").text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_listing_source_item "
+            "ON listings (source, source_id)"
+        ))
 
     logger.info("Migration complete")

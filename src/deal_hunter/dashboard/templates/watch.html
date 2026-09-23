@@ -39,7 +39,15 @@
     {% for h in hits %}
       <tr>
         <td class="mono-num">#{{ h.rule_id }}</td>
-        <td><a class="link mono" href="/deals">#{{ h.listing_id }}</a></td>
+        <td>
+          {% set title = listing_titles.get(h.listing_id) %}
+          {% if title %}
+            <span>{{ title[:56] }}</span>
+            <div class="faint" style="font-size:11px;margin-top:2px">#{{ h.listing_id }}</div>
+          {% else %}
+            <span class="mono">#{{ h.listing_id }}</span>
+          {% endif %}
+        </td>
         <td class="muted">{{ fmt_dt(h.score_at) }}</td>
         <td>{% if h.alerted_at %}<span class="chip chip-buy">sent</span>{% else %}<span class="chip chip-neutral">—</span>{% endif %}</td>
       </tr>

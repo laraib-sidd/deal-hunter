@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Annotated
@@ -39,6 +40,161 @@ _SEVERITY_COLORS = {
     "high": "bold red",
     "critical": "bold white on red",
 }
+
+
+def _listing_to_analysis(listing) -> DealAnalysis | None:
+    """Reconstruct a display analysis from persisted listing fields."""
+    from deal_hunter.analysis.schemas import RedFlag
+    from deal_hunter.db.models import Listing
+
+    if not isinstance(listing, Listing) or listing.deal_score is None or listing.price is None:
+        return None
+    red_flags: list[RedFlag] = []
+    if listing.red_flags_json:
+        try:
+            red_flags = [RedFlag(**flag) for flag in json.loads(listing.red_flags_json)]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return DealAnalysis(
+        canonical_name=listing.canonical_name or listing.title,
+        category=listing.category,
+        brand="",
+        asking_price=int(listing.price),
+        fair_market_low=0,
+        fair_market_high=0,
+        fair_market_mid=0,
+        msrp=0,
+        deal_score=int(listing.deal_score),
+        verdict=listing.deal_verdict or "PASS",
+        reasoning=listing.deal_reason or "",
+        red_flags=red_flags,
+        confidence=0.5,
+    )
+
+
+def _get_scored_listings(engine, min_score: int, limit: int) -> list:
+    from sqlmodel import Session, col, select
+
+    from deal_hunter.db.models import Listing
+
+    with Session(engine) as session:
+        stmt = (
+            select(Listing)
+            .where(Listing.deal_score.is_not(None), Listing.deal_score >= min_score)  # type: ignore[union-attr]
+            .order_by(col(Listing.deal_score).desc())
+            .limit(limit)
+        )
+        return list(session.exec(stmt).all())
+
+
+def _listing_id(listing) -> int | None:
+    from sqlalchemy import inspect as sa_inspect
+
+    identity = sa_inspect(listing).identity
+    if not identity:
+        return None
+    return int(identity[0])
+
+
+def _listings_to_score(engine, ingest_result) -> list:
+    from sqlmodel import Session, select
+
+    from deal_hunter.db.models import Listing
+
+    listing_ids: list[int] = []
+    seen_ids: set[int] = set()
+    for listing in list(ingest_result.fresh) + [row for row, _, _ in ingest_result.price_drops]:
+        listing_id = _listing_id(listing)
+        if listing_id is not None and listing_id not in seen_ids:
+            listing_ids.append(listing_id)
+            seen_ids.add(listing_id)
+
+    if not listing_ids:
+        return []
+
+    with Session(engine) as session:
+        rows = session.exec(select(Listing).where(Listing.id.in_(listing_ids))).all()  # type: ignore[attr-defined]
+        return list(rows)
+
+
+def _rebuild_price_drops(engine, ingest_result) -> list:
+    from sqlmodel import Session
+
+    from deal_hunter.db.models import Listing
+
+    rebuilt: list[tuple[Listing, float, float]] = []
+    with Session(engine) as session:
+        for listing, old_price, new_price in ingest_result.price_drops:
+            listing_id = _listing_id(listing)
+            if listing_id is None:
+                continue
+            row = session.get(Listing, listing_id)
+            if row is not None:
+                rebuilt.append((row, old_price, new_price))
+    return rebuilt
+
+
+async def _process_ingest_result(
+    engine,
+    config,
+    ingest_result,
+    *,
+    min_score: int,
+    ai: bool,
+    notify: bool,
+) -> None:
+    from deal_hunter.alerts.match import match_watches
+    from deal_hunter.alerts.pipeline import decide_alerts, dispatch, score_delta
+    from deal_hunter.db.ingest import mark_stale
+
+    mark_stale(engine, datetime.now(UTC))
+    to_score = _listings_to_score(engine, ingest_result)
+    api_key = config.groq_api_key if ai else ""
+    analyses = await score_delta(engine, to_score, ai_api_key=api_key) if to_score else {}
+    if to_score:
+        match_watches(engine, to_score, analyses)
+    if notify and to_score:
+        price_drops = _rebuild_price_drops(engine, ingest_result)
+        alerts = decide_alerts(
+            to_score,
+            analyses,
+            min_score=min_score,
+            price_drops=price_drops,
+        )
+        await dispatch(engine, config, alerts)
+
+
+async def _run_cycle(
+    engine,
+    config,
+    scrapers,
+    *,
+    keywords: list[str] | None = None,
+    max_pages: int = 3,
+    min_score: int = 6,
+    ai: bool = False,
+    notify: bool = False,
+):
+    from deal_hunter.db.ingest import IngestionService
+    from deal_hunter.scrapers.runner import run_scrapers
+
+    listings = await run_scrapers(
+        scrapers,
+        keywords=keywords,
+        max_pages=max_pages,
+        engine=engine,
+    )
+    ingest_result = IngestionService(engine).ingest_batch(listings)
+    await _process_ingest_result(
+        engine,
+        config,
+        ingest_result,
+        min_score=min_score,
+        ai=ai,
+        notify=notify,
+    )
+    return ingest_result
+
 
 
 def _render_analysis(analysis: DealAnalysis) -> None:
@@ -194,7 +350,8 @@ def scrape(
     import asyncio
 
     from deal_hunter.config import AppConfig
-    from deal_hunter.db.engine import get_engine, upsert_listings
+    from deal_hunter.db.engine import get_engine
+    from deal_hunter.db.ingest import IngestionService
     from deal_hunter.scrapers.runner import build_scrapers, run_scrapers
 
     if verbose:
@@ -215,17 +372,23 @@ def scrape(
     if kw_list:
         console.print(f"[bold]Keywords:[/] {', '.join(kw_list)}")
 
+    engine = get_engine(config.db_path)
+
     with console.status("[bold green]Scraping..."):
-        listings = asyncio.run(run_scrapers(scrapers, keywords=kw_list, max_pages=max_pages))
+        listings = asyncio.run(
+            run_scrapers(scrapers, keywords=kw_list, max_pages=max_pages, engine=engine)
+        )
 
     if not listings:
         console.print("[yellow]No listings found.[/]")
         return
 
-    engine = get_engine(config.db_path)
-    inserted, skipped = upsert_listings(engine, listings)
+    result = IngestionService(engine).ingest_batch(listings)
 
-    console.print(f"\n[bold green]Done![/] {inserted} new listings saved, {skipped} duplicates skipped.")
+    console.print(
+        f"\n[bold green]Done![/] {len(result.new)} new, {len(result.seen)} unchanged, "
+        f"{len(result.reactivated)} reactivated."
+    )
     console.print(f"Total in this batch: {len(listings)} from {len(scrapers)} source(s).")
 
 
@@ -301,13 +464,15 @@ def listings(
 def deals(
     min_score: Annotated[int, typer.Option("--min-score", "-m", help="Minimum deal score (1-10)")] = 6,
     limit: Annotated[int, typer.Option("--limit", "-n")] = 50,
-    ai: Annotated[bool, typer.Option("--ai", help="Use Groq AI for scoring unknown products")] = True,
+    ai: Annotated[bool, typer.Option("--ai", help="Use Groq AI when rescoring")] = False,
+    rescore: Annotated[bool, typer.Option("--rescore", help="Rescore the recent priced window")] = False,
     notify: Annotated[bool, typer.Option("--notify", help="Send Telegram alerts for good deals")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Score stored listings and show the best deals."""
+    """Show persisted deals, optionally rescore the recent priced window."""
     import asyncio
 
+    from deal_hunter.alerts.pipeline import decide_alerts, dispatch, score_delta
     from deal_hunter.config import AppConfig
     from deal_hunter.db.engine import get_engine, get_recent_listings
 
@@ -316,140 +481,123 @@ def deals(
 
     config = AppConfig()
     engine = get_engine(config.db_path)
-    all_listings = get_recent_listings(engine, limit=limit, with_price=True)
 
-    if not all_listings:
-        console.print("[yellow]No priced listings found.[/] Run 'deal-hunter scrape' first.")
-        return
+    if rescore:
+        priced = get_recent_listings(engine, limit=limit, with_price=True)
+        if not priced:
+            console.print("[yellow]No priced listings found.[/] Run 'deal-hunter scrape' first.")
+            return
+        console.print(f"[bold]Rescoring {len(priced)} priced listings...[/]")
+        api_key = config.groq_api_key if ai else ""
 
-    console.print(f"[bold]Scoring {len(all_listings)} priced listings...[/]")
-    normalizer = HardwareNormalizer()
-    api_key = config.groq_api_key if ai else ""
+        async def _rescore() -> dict:
+            return await score_delta(engine, priced, ai_api_key=api_key)
 
-    async def _score_all() -> list[tuple]:
-        from deal_hunter.db.engine import record_prices
-        from deal_hunter.db.models import PriceSnapshot
+        with console.status("[bold green]Rescoring deals..."):
+            analyses = asyncio.run(_rescore())
 
-        scored: list[tuple] = []
-        snapshots: list[PriceSnapshot] = []
-        now = datetime.now(UTC)
-        for listing in all_listings:
-            analysis = await analyze_deal_async(
-                text=listing.title,
-                asking_price=int(listing.price),
-                location=listing.location or "",
-                description=listing.description or "",
-                normalizer=normalizer,
-                ai_api_key=api_key,
-            )
-            if analysis is None:
-                continue
+        if notify and analyses:
+            alerts = decide_alerts(priced, analyses, min_score=min_score)
+            asyncio.run(dispatch(engine, config, alerts))
 
-            # Record price for history tracking (batched after the loop — one transaction)
-            snapshots.append(PriceSnapshot(
-                canonical_name=analysis.canonical_name,
-                category=analysis.category,
-                source=listing.source,
-                price=analysis.asking_price,
-                listing_url=listing.url,
-                location=listing.location,
-                observed_at=now,
-            ))
-
-            if analysis.deal_score >= min_score:
-                scored.append((listing, analysis))
-
-        if snapshots:
-            record_prices(engine, snapshots)
-        return scored
-
-    with console.status("[bold green]Scoring deals..."):
-        scored = asyncio.run(_score_all())
-
-    if not scored:
+    scored_listings = _get_scored_listings(engine, min_score, limit)
+    if not scored_listings:
         console.print(f"[yellow]No deals scored {min_score}+ found.[/] Try lowering --min-score.")
         return
 
-    # Sort by score descending
-    scored.sort(key=lambda x: x[1].deal_score, reverse=True)
-
-    console.print(f"\n[bold]Top Deals ({len(scored)} found, min score {min_score}):[/]\n")
-    for listing, analysis in scored:
+    console.print(f"\n[bold]Top Deals ({len(scored_listings)} found, min score {min_score}):[/]\n")
+    for listing in scored_listings:
+        analysis = _listing_to_analysis(listing)
+        if analysis is None:
+            continue
         _render_analysis(analysis)
         console.print(f"  [dim]Source: {listing.source} | {listing.url}[/]\n")
 
-    # Telegram notifications
-    if notify and config.telegram.enabled:
-        asyncio.run(_send_deal_alerts(config, scored))
 
+@app.command()
+def run(
+    source: Annotated[str | None, typer.Option("--source", "-s", help="Scrape a single source")] = None,
+    keywords: Annotated[str | None, typer.Option("--keywords", "-k", help="Comma-separated search terms")] = None,
+    max_pages: Annotated[int, typer.Option("--pages", help="Max pages per source")] = 3,
+    min_score: Annotated[int, typer.Option("--min-score", "-m", help="Minimum deal score for alerts")] = 6,
+    ai: Annotated[bool, typer.Option("--ai", help="Use Groq AI for scoring unknown products")] = False,
+    notify: Annotated[bool, typer.Option("--notify", help="Send Telegram alerts for good deals")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Run scrape, ingest, score, and optional alerts in one cycle."""
+    import asyncio
 
-async def _send_deal_alerts(config, scored: list[tuple]) -> None:
-    """Send Telegram alerts for scored deals."""
-    from deal_hunter.notifications.telegram import send_deal_alert, send_summary
+    from deal_hunter.config import AppConfig
+    from deal_hunter.db.engine import get_engine
+    from deal_hunter.scrapers.runner import build_scrapers
 
-    top_analyses = [a for _, a in scored[:5]]
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
 
-    await send_summary(
-        bot_token=config.telegram.bot_token,
-        chat_id=config.telegram.chat_id,
-        total_scraped=len(scored),
-        deals_found=len(scored),
-        top_deals=top_analyses,
+    config = AppConfig()
+    if source:
+        config.sources = [source]
+
+    scrapers = build_scrapers(config)
+    if not scrapers:
+        console.print("[yellow]No scrapers configured.[/] Check your source settings.")
+        raise typer.Exit(1)
+
+    kw_list = [k.strip() for k in keywords.split(",")] if keywords else None
+    engine = get_engine(config.db_path)
+
+    console.print(f"[bold]Running cycle from:[/] {', '.join(s.source_name for s in scrapers)}")
+    if kw_list:
+        console.print(f"[bold]Keywords:[/] {', '.join(kw_list)}")
+
+    with console.status("[bold green]Running cycle..."):
+        result = asyncio.run(
+            _run_cycle(
+                engine,
+                config,
+                scrapers,
+                keywords=kw_list,
+                max_pages=max_pages,
+                min_score=min_score,
+                ai=ai,
+                notify=notify,
+            )
+        )
+
+    console.print(
+        f"\n[bold green]Cycle complete.[/] {len(result.new)} new, {len(result.seen)} unchanged, "
+        f"{len(result.price_drops)} price drops."
     )
 
-    send_count = min(len(scored), 10)  # cap at 10 individual alerts
-    for listing, analysis in scored[:send_count]:
-        await send_deal_alert(
-            bot_token=config.telegram.bot_token,
-            chat_id=config.telegram.chat_id,
-            analysis=analysis,
-            listing_url=listing.url,
-            posted_at=listing.posted_at,
-        )
-    console.print(f"[green]Sent {send_count} Telegram alerts.[/]")
 
-
-async def _watch_loop(interval: int, min_score: int, notify: bool, config, scrapers, engine, normalizer) -> None:
-    """One watch cycle, factored out so the CLI command stays thin."""
+async def _watch_loop(
+    interval: int,
+    min_score: int,
+    ai: bool,
+    notify: bool,
+    config,
+    scrapers,
+    engine,
+) -> None:
+    """Continuous scrape-ingest-score-alert cycles."""
     import asyncio
     import time
 
-    from deal_hunter.db.engine import upsert_listings
-    from deal_hunter.scrapers.runner import run_scrapers
-
     while True:
-        console.print(f"[dim]{time.strftime('%H:%M:%S')}[/] Scraping...", end=" ")
-
-        listings = await run_scrapers(scrapers, max_pages=2)
-        inserted, _ = upsert_listings(engine, listings)
-        console.print(f"{len(listings)} fetched, {inserted} new.")
-
-        good_deals = []
-        for listing in listings:
-            if not listing.price:
-                continue
-            analysis = analyze_deal(
-                text=listing.title,
-                asking_price=int(listing.price),
-                location=listing.location or "",
-                description=listing.description or "",
-                normalizer=normalizer,
-            )
-            if analysis and analysis.deal_score >= min_score:
-                good_deals.append((listing, analysis))
-
-        if good_deals:
-            console.print(f"  [green]{len(good_deals)} deal(s) found![/]")
-            for listing, analysis in good_deals:
-                _render_analysis(analysis)
-            if notify and config.telegram.enabled:
-                from deal_hunter.cli import _send_deal_alerts
-
-                await _send_deal_alerts(config, good_deals)
-        else:
-            console.print(f"  No deals above {min_score}.")
-
-        console.print(f"  Next scrape in {interval}s...\n")
+        console.print(f"[dim]{time.strftime('%H:%M:%S')}[/] Running cycle...", end=" ")
+        result = await _run_cycle(
+            engine,
+            config,
+            scrapers,
+            max_pages=2,
+            min_score=min_score,
+            ai=ai,
+            notify=notify,
+        )
+        console.print(
+            f"{len(result.new)} new, {len(result.seen)} unchanged, {len(result.price_drops)} drops."
+        )
+        console.print(f"  Next cycle in {interval}s...\n")
         await asyncio.sleep(interval)
 
 
@@ -471,7 +619,6 @@ def watch(
     config = AppConfig()
     scrapers = build_scrapers(config)
     engine = get_engine(config.db_path)
-    normalizer = HardwareNormalizer()
 
     console.print(f"[bold]Watch mode[/] — scraping every {interval}s, min score {min_score}")
     console.print(f"Sources: {', '.join(s.source_name for s in scrapers)}")
@@ -489,7 +636,7 @@ def watch(
         loop.add_signal_handler(signal.SIGTERM, _on_signal, signal.SIGTERM, None)
 
         async with asyncio.TaskGroup() as tg:
-            task = tg.create_task(_watch_loop(interval, min_score, notify, config, scrapers, engine, normalizer))
+            task = tg.create_task(_watch_loop(interval, min_score, ai, notify, config, scrapers, engine))
             await stop.wait()
             task.cancel()
 

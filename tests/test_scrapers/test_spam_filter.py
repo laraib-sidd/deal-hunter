@@ -17,9 +17,14 @@ class TestSpamExclusion:
         assert not _is_deal_post("[H] 1000 upi [W] flipkart gc", "")
         assert not _is_deal_post("gift cards", "80% upi exchange")
 
-    def test_voucher_deal_passes_when_not_upi(self) -> None:
-        # A genuine coupon/deal (no upi/gc trade) still passes deal filter
-        assert _is_deal_post("Flat 50% off on Nike shoes", "use code LOOT50")
+    def test_voucher_without_hardware_rejected_as_deal(self) -> None:
+        assert not _is_deal_post("Flat 50% off on Nike shoes", "use code LOOT50")
+
+    def test_coupon_with_hardware_rejected_as_deal(self) -> None:
+        assert not _is_deal_post("20% off RTX 3060", "use promo code SAVE20")
+
+    def test_hardware_sale_passes_in_deal_sub(self) -> None:
+        assert _is_deal_post("Selling RTX 3080 in Mumbai", "Rs 25000")
 
     def test_hardware_with_payment_context_allowed(self) -> None:
         # A legit GPU listing that mentions price still qualifies
